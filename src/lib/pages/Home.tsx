@@ -356,7 +356,7 @@ export function Home() {
                       {item.type === 'channel' ? 'قناة' : item.type === 'match' ? 'مباراة' : 'سينما'}
                     </div>
                   </div>
-                  <h4 className="mt-2 text-xs font-bold text-gray-900 group-hover:text-brand transition-colors truncate block text-center min-w-0">
+                  <h4 className="mt-1.5 font-bold text-[9px] min-[370px]:text-[10px] sm:text-xs leading-tight text-gray-900 group-hover:text-brand transition-colors text-center line-clamp-2 min-h-[25px] sm:min-h-[32px] overflow-hidden px-0.5 break-words" title={item.name}>
                     {item.name}
                   </h4>
                 </Link>
@@ -368,18 +368,18 @@ export function Home() {
 
       {/* 3. Latest Additions Row Slider with Glass Dark Style */}
       {!isMatchesPage && latestAll.length > 0 && (
-        <section className="bg-white px-5 py-6 rounded-3xl border border-slate-100 shadow-sm overflow-hidden relative">
-          <div className="flex items-center justify-between mb-5">
-            <div className="flex items-center gap-3">
-              <span className="w-1.5 h-4 bg-brand rounded-full shadow-[0_2px_10px_rgba(37,99,235,0.3)]"></span>
-              <h2 className="text-base sm:text-lg font-black text-gray-950">{t('latest_additions')}</h2>
+        <section className="bg-white px-4 py-5 rounded-3xl border border-slate-100 shadow-sm overflow-hidden relative">
+          <div className="flex items-center justify-between mb-4 px-1">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="w-1.5 h-4 bg-brand rounded-full shadow-[0_2px_10px_rgba(37,99,235,0.3)] shrink-0"></span>
+              <h2 className="text-xs sm:text-sm font-black text-gray-950 truncate" title={t('latest_additions')}>{t('latest_additions')}</h2>
             </div>
             <Link 
               to="/latest" 
-              className="px-3.5 py-1.5 rounded-full bg-slate-50 text-xs font-bold text-gray-500 hover:text-brand hover:bg-brand/10 border border-slate-100 transition-all flex items-center gap-1"
+              className="px-2.5 py-1 rounded-full bg-slate-50 text-[10px] sm:text-xs font-bold text-gray-500 hover:text-brand hover:bg-brand/10 border border-slate-100 transition-all flex items-center gap-0.5 shrink-0"
             >
               <span>{t('view_all')}</span>
-              <ChevronLeft className="w-3.5 h-3.5" />
+              <ChevronLeft className="w-3 h-3" />
             </Link>
           </div>
           <div 
@@ -390,10 +390,10 @@ export function Home() {
                <motion.div 
                  key={`${item.collection}-${item.id}`}
                  whileHover={{ y: -5, scale: 1.02 }}
-                 className="flex-shrink-0 w-[95px] sm:w-[120px] snap-start"
+                 className="flex-shrink-0 w-[105px] xs:w-[125px] sm:w-[140px] md:w-[155px] xl:w-[175px] snap-start"
                >
                  <Link to={`/${item.collection}/${item.id}`} className="block group">
-                    <div className="relative aspect-[2/3] rounded-2xl overflow-hidden bg-slate-50 border border-slate-100 shadow-sm group-hover:border-brand/35 transition-all duration-300">
+                    <div className="relative aspect-[2/3] rounded-lg overflow-hidden bg-slate-50 border border-slate-100 shadow-sm group-hover:border-brand/35 transition-all duration-300">
                        <img 
                         src={
                           item.collection === 'match' ? (item.logoA || "https://placehold.co/400x600/f8fafc/white?text=Match") : 
@@ -403,23 +403,23 @@ export function Home() {
                         alt={item.name || item.title || item.teamA}
                         className={`w-full h-full transition-transform duration-500 group-hover:scale-105 ${
                           (item.collection === 'channel' || item.collection === 'match') 
-                            ? 'object-contain p-2.5 bg-slate-100' 
+                            ? 'object-contain p-2 bg-slate-100' 
                             : 'object-cover'
                         }`}
                         loading="lazy"
                        />
                        
-                       <div className="absolute top-2 left-2 z-10 flex flex-col gap-1">
+                       <div className="absolute top-1.5 left-1.5 z-10 flex flex-col gap-1">
                           {item.collection === 'match' && (
-                            <div className="bg-brand text-white text-[8px] font-black px-1.5 py-0.5 rounded shadow-lg uppercase">مباراة</div>
+                            <div className="bg-brand text-white text-[7px] font-black px-1.5 py-0.5 rounded shadow-lg uppercase">مباراة</div>
                           )}
                           {item.collection === 'channel' && (
-                            <div className="bg-brand text-white text-[8px] font-black px-1.5 py-0.5 rounded shadow-lg uppercase">قناة</div>
+                            <div className="bg-brand text-white text-[7px] font-black px-1.5 py-0.5 rounded shadow-lg uppercase">قناة</div>
                           )}
                        </div>
                        <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-80" />
                     </div>
-                    <p className="mt-2 text-xs font-bold text-center leading-snug text-gray-900 group-hover:text-brand transition-colors truncate px-0.5 max-w-full">
+                    <p className="mt-1.5 font-bold text-[9px] min-[370px]:text-[10px] sm:text-xs leading-tight text-center text-gray-900 group-hover:text-brand transition-colors line-clamp-2 min-h-[25px] sm:min-h-[32px] overflow-hidden px-0.5 break-words" title={item.collection === 'match' ? `${item.teamA} ضد ${item.teamB}` : (item.name || item.title)}>
                       {item.collection === 'match' ? `${item.teamA} ضد ${item.teamB}` : (item.name || item.title)}
                     </p>
                   </Link>

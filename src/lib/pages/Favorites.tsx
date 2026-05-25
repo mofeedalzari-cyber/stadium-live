@@ -127,7 +127,7 @@ export function Favorites() {
                           alt={fav.data.name} 
                         />
                       </div>
-                      <h3 className="mt-2 text-xs font-bold text-center leading-snug truncate text-white/90 group-hover:text-brand transition-colors">
+                      <h3 className="mt-1.5 font-bold text-[9.5px] sm:text-xs leading-tight text-center text-white/90 group-hover:text-brand transition-colors line-clamp-2 h-7.5 sm:h-9 overflow-hidden px-0.5" title={fav.data.name}>
                         {fav.data.name}
                       </h3>
                     </Link>
@@ -166,7 +166,7 @@ export function Favorites() {
                           alt={fav.data.title} 
                         />
                       </div>
-                      <h3 className="mt-2 text-xs font-bold text-center leading-snug truncate text-white/90 group-hover:text-brand transition-colors">
+                      <h3 className="mt-1.5 font-bold text-[9.5px] sm:text-xs leading-tight text-center text-white/90 group-hover:text-brand transition-colors line-clamp-2 h-7.5 sm:h-9 overflow-hidden px-0.5" title={fav.data.title || fav.data.name}>
                         {fav.data.title || fav.data.name}
                       </h3>
                     </Link>

@@ -218,7 +218,7 @@ export function LatestAdditions() {
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
 
-                    <h3 className="mt-2.5 font-bold text-[10px] sm:text-xs text-center leading-snug text-gray-700 dark:text-gray-300 group-hover:text-brand transition-colors px-1 break-words">
+                    <h3 className="mt-1.5 font-bold text-[9px] min-[370px]:text-[10px] sm:text-xs text-center leading-tight text-gray-700 dark:text-gray-300 group-hover:text-brand transition-colors px-0.5 line-clamp-2 min-h-[25px] sm:min-h-[32px] overflow-hidden break-words" title={displayTitle}>
                       {displayTitle}
                     </h3>
                   </Link>

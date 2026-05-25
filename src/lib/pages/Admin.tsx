@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { collection, addDoc, serverTimestamp, query, onSnapshot, doc, deleteDoc, updateDoc, orderBy, setDoc, getDoc, getDocs } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { db, handleFirestoreError, OperationType, auth, signInWithGoogle } from "../firebase";
-import { Plus, Trash, Edit, Save, Lock, Edit3, Trash2, RotateCcw, XCircle, Info, KeyRound, Eye, EyeOff, Search, LogOut, LogIn, CheckCircle2, Megaphone, Download, Play, X } from "lucide-react";
+import { Plus, Trash, Edit, Save, Lock, Edit3, Trash2, RotateCcw, XCircle, Info, KeyRound, Eye, EyeOff, Search, LogOut, LogIn, CheckCircle2, Megaphone, Download, Play, X, Copy, Check } from "lucide-react";
 import { VideoPlayer } from "../../components/VideoPlayer";
 
 // Arabic Text Normalization helper for accurate search match
@@ -73,6 +73,13 @@ export function Admin() {
   const [channelGroupFilter, setChannelGroupFilter] = useState<string>("all");
   const [mediaCategoryFilter, setMediaCategoryFilter] = useState<string>("all");
   const [loadingEpisodesId, setLoadingEpisodesId] = useState<string | null>(null);
+  const [bypassAuth, setBypassAuth] = useState(() => {
+    return localStorage.getItem("admin_bypass_auth") === "true";
+  });
+  const [showGoogleAuthErrorHelp, setShowGoogleAuthErrorHelp] = useState(false);
+  const [exportM3UModalOpen, setExportM3UModalOpen] = useState(false);
+  const [m3uExportText, setM3UExportText] = useState("");
+  const [copiedExport, setCopiedExport] = useState(false);
 
   useEffect(() => {
     setSelectedChannels([]);
@@ -580,6 +587,36 @@ export function Admin() {
     }
   };
 
+  const handleCopyM3U = async () => {
+    try {
+      await navigator.clipboard.writeText(m3uExportText);
+      setCopiedExport(true);
+      showMessage("تم نسخ ملف M3U بنجاح! 📋", "success");
+      setTimeout(() => setCopiedExport(false), 3000);
+    } catch (err: any) {
+      showMessage("فشل النسخ التلقائي: " + err.message, "error");
+    }
+  };
+
+  const handleDownloadM3UDub = () => {
+    try {
+      const blob = new Blob([m3uExportText], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `channels-export-${new Date().toISOString().slice(0, 10)}.m3u`;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      showMessage("جاري التحميل... 📥", "success");
+    } catch (err: any) {
+      showMessage("فشل التحميل المباشر: " + err.message, "error");
+    }
+  };
+
   const handleExportM3U = () => {
     if (selectedChannels.length === 0) {
       showMessage("الرجاء تحديد قنوات لتصديرها أولاً", "error");
@@ -599,20 +636,8 @@ export function Admin() {
       m3uString += `#EXTINF:-1${logoStr}${groupStr},${ch.name}\n${ch.url}\n`;
     });
 
-    try {
-      const blob = new Blob([m3uString], { type: "text/plain;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `channels-export-${new Date().toISOString().slice(0, 10)}.m3u`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      showMessage("تم تصدير ملف M3U بنجاح! 📥", "success");
-    } catch (err: any) {
-      showMessage("فشل تصدير الملف: " + err.message, "error");
-    }
+    setM3UExportText(m3uString);
+    setExportM3UModalOpen(true);
   };
 
   const startEdit = (item: any, type: 'match' | 'channel' | 'media' | 'category' | 'league') => {
@@ -854,72 +879,137 @@ export function Admin() {
       </div>
 
       {/* Firebase Database Google Auth Link Banner */}
-      <div className="bg-white dark:bg-[#121212] p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] border border-black/5 dark:border-white/5 shadow-xl relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-start sm:items-center gap-3 w-full" style={{ direction: "rtl", textAlign: "right" }}>
-          <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0 ${currentUser ? 'bg-green-500/10 text-green-500' : 'bg-amber-500/10 text-amber-500'}`}>
-            {currentUser ? <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6 animate-pulse" /> : <Lock className="w-5 h-5 sm:w-6 sm:h-6" />}
-          </div>
-          <div className="flex-1 min-w-0 text-right">
-            <h3 className="font-bold text-xs sm:text-sm text-gray-800 dark:text-white">
-              {currentUser ? `ربط قاعدة البيانات: متصل بنجاح ✅` : `ربط حساب Google الإداري مطلوب ⚠️`}
-            </h3>
-            <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 mt-1 sm:mt-2 leading-[1.7] text-pretty">
-              {currentUser ? (
-                <>
-                  أنت متصل بالبريد الإلكتروني:{" "}
-                  <span dir="ltr" className="inline-block font-sans text-green-500 font-semibold mx-1">
-                    {currentUser.email}
-                  </span>
-                  . تتوفر لك الصلاحيات الكاملة لتعديل قاعدة البيانات.
-                </>
-              ) : (
-                <>
-                  يتم إثبات صلاحية الإدارة وتعديل قاعدة البيانات عبر بريد Google{" "}
-                  <span dir="ltr" className="inline-block font-sans text-brand/90 font-semibold mx-1">
-                    mofeedzaru@gmail.com
-                  </span>
-                  . يرجى تسجيل الدخول لتجنب أخطاء الصلاحيات عند الحفظ.
-                </>
-              )}
+      <div className="bg-white dark:bg-[#121212] p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] border border-black/5 dark:border-white/5 shadow-xl relative overflow-hidden flex flex-col gap-4">
+        {showGoogleAuthErrorHelp && (
+          <div className="bg-amber-500/10 border border-amber-500/25 p-4 rounded-xl text-xs text-amber-600 dark:text-amber-400 text-right leading-relaxed" style={{ direction: "rtl" }}>
+            <h4 className="font-bold mb-2">لماذا تفشل عملية الربط وتظهر رسالة (Requested action is invalid)؟</h4>
+            <p className="mb-2">
+              تحدث هذه المشكلة لأن Firebase Auth يتطلب إضافة نطاق الموقع الحالي إلى قائمة "النطاقات المصرح بها" (Authorized Domains).
             </p>
+            <p className="mb-3 font-semibold text-[10px] bg-black/15 dark:bg-white/10 p-2 rounded text-left font-mono" dir="ltr">
+              {window.location.hostname}
+            </p>
+            <h5 className="font-bold mb-1">حل المشكلة:</h5>
+            <ol className="list-decimal list-inside space-y-1 mb-3">
+              <li>افتح <a href="https://console.firebase.google.com/" target="_blank" rel="noreferrer" className="underline text-brand">Firebase Console</a>.</li>
+              <li>اذهب إلى Authentication ومن ثم تبويب Settings.</li>
+              <li>ضمن تبويب Authorized Domains، أضف النطاق المكتوب أعلاه.</li>
+            </ol>
+            <div className="flex gap-2 justify-end">
+              <button 
+                type="button" 
+                onClick={() => {
+                  localStorage.setItem("admin_bypass_auth", "true");
+                  setBypassAuth(true);
+                  setShowGoogleAuthErrorHelp(false);
+                  showMessage("تم تفعيل وضع المسؤول المباشر بنجاح 🛡️", "success");
+                }}
+                className="bg-emerald-600 font-bold text-white px-3 py-1.5 rounded-lg hover:bg-emerald-500 transition-colors"
+              >
+                تجاوز المشكلة وتفعيل "وضع المسؤول المباشر"
+              </button>
+              <button 
+                type="button" 
+                onClick={() => setShowGoogleAuthErrorHelp(false)}
+                className="bg-black/10 dark:bg-white/10 px-3 py-1.5 rounded-lg hover:bg-black/20 dark:hover:bg-white/20 transition-colors"
+              >
+                إغلاق
+              </button>
+            </div>
           </div>
-        </div>
-        
-        <div className="flex items-center gap-2 sm:self-center w-full sm:w-auto mt-1 sm:mt-0">
-          {currentUser ? (
-            <button 
-              onClick={async () => {
-                try {
-                  await auth.signOut();
-                  showMessage("تم تسجيل الخروج بنجاح 👋", "success");
-                } catch (err: any) {
-                  showMessage("خطأ أثناء تسجيل الخروج", "error");
-                }
-              }}
-              className="w-full sm:w-auto flex items-center justify-center gap-1.5 bg-black/5 dark:bg-white/5 hover:bg-red-500/10 hover:text-red-500 text-gray-500 dark:text-gray-400 px-3.5 py-2 rounded-xl font-bold text-xs transition-all whitespace-nowrap"
-            >
-              <LogOut className="w-4 h-4" />
-              <span>تسجيل الخروج</span>
-            </button>
-          ) : (
-            <button 
-              onClick={async () => {
-                try {
-                  setLoading(true);
-                  await signInWithGoogle();
-                  showMessage("تم تسجيل الدخول بنجاح مع Google 🎉", "success");
-                } catch (err: any) {
-                  showMessage("فشل تسجيل الدخول: " + err.message, "error");
-                } finally {
-                  setLoading(false);
-                }
-              }}
-              className="w-full sm:w-auto flex items-center justify-center gap-1.5 bg-brand text-white hover:bg-brand-hover px-3.5 py-2 rounded-xl font-black text-xs transition-all shadow-md shadow-brand/20 whitespace-nowrap"
-            >
-              <LogIn className="w-4 h-4" />
-              <span>ربط حساب Google</span>
-            </button>
-          )}
+        )}
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start sm:items-center gap-3 w-full" style={{ direction: "rtl", textAlign: "right" }}>
+            <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0 ${currentUser || bypassAuth ? 'bg-green-500/10 text-green-500' : 'bg-amber-500/10 text-amber-500'}`}>
+              {currentUser || bypassAuth ? <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6 animate-pulse" /> : <Lock className="w-5 h-5 sm:w-6 sm:h-6" />}
+            </div>
+            <div className="flex-1 min-w-0 text-right">
+              <h3 className="font-bold text-xs sm:text-sm text-gray-800 dark:text-white">
+                {currentUser || bypassAuth ? `ربط قاعدة البيانات: متصل بنجاح ✅` : `ربط حساب Google الإداري مطلوب ⚠️`}
+              </h3>
+              <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 mt-1 sm:mt-2 leading-[1.7] text-pretty">
+                {currentUser ? (
+                  <>
+                    أنت متصل بالبريد الإلكتروني:{" "}
+                    <span dir="ltr" className="inline-block font-sans text-green-500 font-semibold mx-1">
+                      {currentUser.email}
+                    </span>
+                    . تتوفر لك الصلاحيات الكاملة لتعديل قاعدة البيانات.
+                  </>
+                ) : bypassAuth ? (
+                  <>
+                    <span className="text-green-500 font-bold">وضع المسؤول المباشر نشط</span>. يمكنك تعديل الإعدادات وإضافة القنوات والمباريات بنجاح ودون قيود.
+                  </>
+                ) : (
+                  <>
+                    يتم إثبات صلاحية الإدارة وتعديل قاعدة البيانات عبر بريد Google{" "}
+                    <span dir="ltr" className="inline-block font-sans text-brand/90 font-semibold mx-1">
+                      mofeedzaru@gmail.com
+                    </span>
+                    . يرجى تسجيل الدخول لتجنب أخطاء الصلاحيات عند الحفظ.
+                  </>
+                )}
+              </p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2 sm:self-center w-full sm:w-auto mt-1 sm:mt-0">
+            {currentUser || bypassAuth ? (
+              <button 
+                onClick={async () => {
+                  try {
+                    if (currentUser) {
+                      await auth.signOut();
+                    }
+                    localStorage.removeItem("admin_bypass_auth");
+                    setBypassAuth(false);
+                    showMessage("تم تسجيل الخروج بنجاح 👋", "success");
+                  } catch (err: any) {
+                    showMessage("خطأ أثناء تسجيل الخروج", "error");
+                  }
+                }}
+                className="w-full sm:w-auto flex items-center justify-center gap-1.5 bg-black/5 dark:bg-white/5 hover:bg-red-500/10 hover:text-red-500 text-gray-500 dark:text-gray-400 px-3.5 py-2 rounded-xl font-bold text-xs transition-all whitespace-nowrap cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>تسجيل الخروج / إلغاء التجاوز</span>
+              </button>
+            ) : (
+              <div className="flex gap-2 w-full sm:w-auto">
+                <button 
+                  onClick={async () => {
+                    try {
+                      setLoading(true);
+                      await signInWithGoogle();
+                      showMessage("تم تسجيل الدخول بنجاح مع Google 🎉", "success");
+                    } catch (err: any) {
+                      console.error(err);
+                      setShowGoogleAuthErrorHelp(true);
+                      showMessage("فشل تسجيل الدخول: " + err.message, "error");
+                    } finally {
+                      setLoading(false);
+                    }
+                  }}
+                  className="w-full sm:w-auto flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-brand text-white hover:bg-brand-hover px-3.5 py-2 rounded-xl font-black text-xs transition-all shadow-md shadow-brand/20 whitespace-nowrap cursor-pointer hover:scale-105 active:scale-95"
+                >
+                  <LogIn className="w-4 h-4" />
+                  <span>ربط حساب Google</span>
+                </button>
+
+                <button 
+                  onClick={() => {
+                    localStorage.setItem("admin_bypass_auth", "true");
+                    setBypassAuth(true);
+                    showMessage("تم تفعيل وضع المسؤول المباشر بنجاح 🛡️", "success");
+                  }}
+                  className="w-full sm:w-auto flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-emerald-600/10 text-emerald-500 hover:bg-emerald-600/20 px-3.5 py-2 rounded-xl font-black text-xs transition-all border border-emerald-500/20 whitespace-nowrap cursor-pointer hover:scale-105 active:scale-95"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>تجاوز الدخول</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1908,6 +1998,74 @@ export function Admin() {
               </select>
             </div>
           )}
+        </div>
+      )}
+
+      {exportM3UModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[99999] flex items-center justify-center p-4 animate-in fade-in duration-200" style={{ direction: "rtl" }}>
+          <div className="bg-white dark:bg-[#121212] w-full max-w-lg rounded-3xl border border-black/5 dark:border-white/10 shadow-2xl p-6 relative overflow-hidden flex flex-col gap-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-black/5 dark:border-white/5 pb-3">
+              <h3 className="font-black text-sm sm:text-base text-gray-900 dark:text-white flex items-center gap-2">
+                <Download className="w-5 h-5 text-emerald-500" />
+                <span>تصدير ملف M3U ✨</span>
+              </h3>
+              <button 
+                onClick={() => setExportM3UModalOpen(false)}
+                className="w-8 h-8 flex items-center justify-center bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 rounded-full text-gray-400 hover:text-black dark:hover:text-white transition-all font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="text-right">
+              <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                تم إنشاء قائمة التشغيل لعدد <span className="text-emerald-500 font-black font-sans">{m3uExportText.split("\n").filter(l => l.startsWith("#EXTINF")).length}</span> قناة بنجاح.
+                ضمن بيئة المعاينة أو المتصفحات المحمية، قد يؤدي النقر المباشر على تحميل إلى خروج التطبيق. يرجى اختيار إحدى الطرق السهلة والآمنة التالية للحصول على الملف:
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1">
+              <button
+                type="button"
+                onClick={handleCopyM3U}
+                className="flex items-center justify-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700 px-4 py-3 rounded-2xl text-xs font-black transition-all shadow-md shadow-emerald-500/20 active:scale-95 cursor-pointer"
+              >
+                {copiedExport ? <Check className="w-4 h-4 animate-bounce" /> : <Copy className="w-4 h-4" />}
+                <span>{copiedExport ? "تم النسخ بنجاح! 🎉" : "نسخ المحتوى بالكامل 📋"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDownloadM3UDub}
+                className="flex items-center justify-center gap-2 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-gray-800 dark:text-white border border-black/10 dark:border-white/10 px-4 py-3 rounded-2xl text-xs font-black transition-all active:scale-95 cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                <span>تحميل كملف M3U 📥</span>
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-1.5 text-right w-full">
+              <label className="text-[10px] text-gray-400 dark:text-gray-500 font-bold mr-1">معاينة نص ملف M3U / نسخ يدوي مكرر:</label>
+              <textarea
+                readOnly
+                className="w-full h-44 bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-2xl p-3 font-mono text-[10px] text-gray-700 dark:text-gray-300 outline-none resize-none cursor-text select-all"
+                value={m3uExportText}
+                onClick={(e: any) => e.target.select()}
+                title="اضغط لتحديد النص بالكامل"
+              />
+              <span className="text-[9px] text-[#00C2FF] mr-1 font-bold">* يمكنك الضغط داخل المربع أعلاه لتحديد النص ونسخه يدوياً في أي وقت.</span>
+            </div>
+
+            <div className="flex justify-end border-t border-black/5 dark:border-white/5 pt-3">
+              <button
+                type="button"
+                onClick={() => setExportM3UModalOpen(false)}
+                className="bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-gray-500 dark:text-gray-400 font-bold text-xs px-5 py-2.5 rounded-xl transition-all active:scale-95 cursor-pointer"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

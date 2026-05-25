@@ -106,7 +106,7 @@ export function MatchDetails() {
           <div className="relative z-10 flex items-center justify-between gap-2">
             {/* Team A */}
             <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0 justify-end">
-              <span className="text-xs sm:text-sm font-bold text-white truncate max-w-[100px] sm:max-w-none">{teamAName}</span>
+              <span className="text-[10px] min-[390px]:text-xs sm:text-sm font-bold text-white truncate max-w-[115px] sm:max-w-none">{teamAName}</span>
               <div className="w-8 h-8 sm:w-11 sm:h-11 bg-black/40 rounded-full p-1.5 border border-white/10 shadow-sm flex items-center justify-center shrink-0">
                 <img 
                   src={match.logoA || "https://placehold.co/150x150/f4f7fb/111827?text=" + encodeURIComponent(teamAName.slice(0, 3))} 
@@ -165,7 +165,7 @@ export function MatchDetails() {
                   className="max-w-full max-h-full object-contain" 
                 />
               </div>
-              <span className="text-xs sm:text-sm font-bold text-white truncate max-w-[100px] sm:max-w-none">{teamBName}</span>
+              <span className="text-[10px] min-[390px]:text-[11px] sm:text-sm font-bold text-white truncate max-w-[115px] sm:max-w-none">{teamBName}</span>
             </div>
           </div>
         </div>

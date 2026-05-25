@@ -262,7 +262,7 @@ export function Explore() {
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 border-b border-black/5 dark:border-white/5 pb-2">
                       <span className="w-1.5 h-5 bg-brand rounded-full shadow-[0_0_10px_rgba(5,150,105,0.4)]" />
-                      <h2 className="text-lg font-black text-gray-800 dark:text-white">قنوات الرياضة ⚽ ({sportsChannels.length})</h2>
+                      <h2 className="text-xs sm:text-sm font-black text-gray-800 dark:text-white">قنوات الرياضة ⚽ ({sportsChannels.length})</h2>
                     </div>
                     <div className="grid grid-cols-3 min-[450px]:grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-2.5 sm:gap-4">
                       {sportsChannels.map((item, idx) => (
@@ -276,7 +276,7 @@ export function Explore() {
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 border-b border-black/5 dark:border-white/5 pb-2">
                       <span className="w-1.5 h-5 bg-brand rounded-full shadow-[0_0_10px_rgba(5,150,105,0.4)]" />
-                      <h2 className="text-lg font-black text-gray-800 dark:text-white">القنوات السينمائية 🎬 ({cinemaChannels.length})</h2>
+                      <h2 className="text-xs sm:text-sm font-black text-gray-800 dark:text-white">القنوات السينمائية 🎬 ({cinemaChannels.length})</h2>
                     </div>
                     <div className="grid grid-cols-3 min-[450px]:grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-2.5 sm:gap-4">
                       {cinemaChannels.map((item, idx) => (
@@ -290,7 +290,7 @@ export function Explore() {
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 border-b border-black/5 dark:border-white/5 pb-2">
                       <span className="w-1.5 h-5 bg-brand rounded-full shadow-[0_0_10px_rgba(5,150,105,0.4)]" />
-                      <h2 className="text-lg font-black text-gray-800 dark:text-white">قنوات تلفونية 📱 ({telephonyChannels.length})</h2>
+                      <h2 className="text-xs sm:text-sm font-black text-gray-800 dark:text-white">قنوات تلفونية 📱 ({telephonyChannels.length})</h2>
                     </div>
                     <div className="grid grid-cols-3 min-[450px]:grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-2.5 sm:gap-4">
                       {telephonyChannels.map((item, idx) => (
@@ -304,7 +304,7 @@ export function Explore() {
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 border-b border-black/5 dark:border-white/5 pb-2">
                       <span className="w-1.5 h-5 bg-brand rounded-full shadow-[0_0_10px_rgba(5,150,105,0.4)]" />
-                      <h2 className="text-lg font-black text-gray-800 dark:text-white">القنوات الإخبارية 📰 ({newsChannels.length})</h2>
+                      <h2 className="text-xs sm:text-sm font-black text-gray-800 dark:text-white">القنوات الإخبارية 📰 ({newsChannels.length})</h2>
                     </div>
                     <div className="grid grid-cols-3 min-[450px]:grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-2.5 sm:gap-4">
                       {newsChannels.map((item, idx) => (
@@ -318,7 +318,7 @@ export function Explore() {
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 border-b border-black/5 dark:border-white/5 pb-2">
                       <span className="w-1.5 h-5 bg-brand rounded-full shadow-[0_0_10px_rgba(5,150,105,0.4)]" />
-                      <h2 className="text-lg font-black text-gray-800 dark:text-white">قنوات عامة وأخرى 📺 ({otherChannels.length})</h2>
+                      <h2 className="text-xs sm:text-sm font-black text-gray-800 dark:text-white">قنوات عامة وأخرى 📺 ({otherChannels.length})</h2>
                     </div>
                     <div className="grid grid-cols-3 min-[450px]:grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-2.5 sm:gap-4">
                       {otherChannels.map((item, idx) => (
@@ -335,7 +335,7 @@ export function Explore() {
                     <div key={cat.id} className="space-y-4">
                       <div className="flex items-center gap-2 border-b border-black/5 dark:border-white/5 pb-2">
                         <span className="w-1.5 h-5 bg-brand rounded-full shadow-[0_0_10px_rgba(5,150,105,0.4)]" />
-                        <h2 className="text-lg font-black text-gray-800 dark:text-white">{cat.name} 📺 ({catChannels.length})</h2>
+                        <h2 className="text-xs sm:text-sm font-black text-gray-800 dark:text-white">{cat.name} 📺 ({catChannels.length})</h2>
                       </div>
                       <div className="grid grid-cols-3 min-[450px]:grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-2.5 sm:gap-4">
                         {catChannels.map((item, idx) => (
@@ -377,19 +377,19 @@ export function Explore() {
 function ChannelCard({ item, type }: { item: any; type: string }) {
   return (
     <motion.div 
-      whileHover={{ scale: 1.05 }}
-      className="group relative focus-within:ring-2 focus-within:ring-brand focus-within:scale-105 rounded-2xl transition-all p-2 bg-white border border-slate-100 shadow-sm hover:shadow-md"
+      whileHover={{ scale: 1.03 }}
+      className="group relative focus-within:ring-2 focus-within:ring-brand focus-within:scale-105 rounded-xl transition-all p-1.5 bg-white border border-slate-100 shadow-sm hover:shadow-md"
     >
-      <div className="absolute top-4 right-4 z-20 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+      <div className="absolute top-2.5 right-2.5 z-20 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
         <FavoriteButton 
           itemId={item.id} 
           type={type === 'channel' ? 'channel' : 'media'} 
           itemData={item}
-          className="bg-white/90 backdrop-blur-md p-2 rounded-xl border border-slate-200 text-gray-500 hover:text-brand"
+          className="bg-white/90 backdrop-blur-md p-1.5 rounded-xl border border-slate-200 text-gray-500 hover:text-brand"
         />
       </div>
       <Link to={`/${type === 'channel' ? 'channel' : 'media'}/${item.id}`} className="block focus:outline-none">
-        <div className="relative aspect-[2/3] rounded-xl overflow-hidden bg-slate-50 border border-slate-100 transition-all">
+        <div className="relative aspect-[2/3] rounded-lg overflow-hidden bg-slate-50 border border-slate-100 transition-all">
           <img 
             src={type === 'channel' 
               ? (item.logo || "https://placehold.co/400x600/f8fafc/2563eb?text=%D9%82%D9%86%D8%A7%D8%A9")
@@ -398,14 +398,14 @@ function ChannelCard({ item, type }: { item: any; type: string }) {
             alt={item.name || item.title} 
             className={`w-full h-full transition-transform duration-500 group-hover:scale-110 ${
               type === 'channel' 
-                ? 'object-contain p-2.5 bg-slate-900/5' 
+                ? 'object-contain p-2 bg-slate-900/5' 
                 : 'object-cover'
             }`}
             loading="lazy"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>
-        <h3 className="mt-2 font-black text-[11px] sm:text-xs leading-snug text-gray-900 group-hover:text-brand transition-colors text-center px-1 break-words line-clamp-1">
+        <h3 className="mt-1.5 font-bold text-[9px] min-[370px]:text-[10px] sm:text-xs leading-tight text-gray-900 group-hover:text-brand transition-colors text-center px-0.5 line-clamp-2 min-h-[25px] sm:min-h-[32px] overflow-hidden break-words" title={item.name || item.title}>
           {item.name || item.title}
         </h3>
       </Link>

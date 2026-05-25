@@ -421,8 +421,8 @@ export function Search() {
                       </div>
                     </div>
 
-                    <div className="mt-2 text-center px-1">
-                      <h3 className="font-bold text-[11px] sm:text-xs leading-snug group-hover:text-brand transition-colors text-slate-800 dark:text-slate-100 break-words">
+                    <div className="mt-1.5 text-center px-0.5">
+                      <h3 className="font-bold text-[9px] min-[370px]:text-[10px] sm:text-xs leading-tight group-hover:text-brand transition-colors text-slate-800 dark:text-slate-100 line-clamp-2 min-h-[25px] sm:min-h-[32px] overflow-hidden break-words" title={item.title}>
                         {item.title}
                       </h3>
                       <p className="text-[10px] text-gray-500 font-medium mt-0.5 flex items-center justify-center gap-1">

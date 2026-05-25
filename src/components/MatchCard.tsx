@@ -125,7 +125,7 @@ export function MatchCard({ match }: { match: any }) {
               />
             </div>
           </div>
-          <span className="text-[11px] sm:text-xs md:text-sm font-black text-gray-900 mt-1 line-clamp-1">{match.teamA || "برشلونة"}</span>
+          <span className="text-[11px] sm:text-xs md:text-sm font-black text-gray-900 mt-1 line-clamp-2 min-h-[16px] sm:min-h-[20px] break-words leading-tight">{match.teamA || "برشلونة"}</span>
         </div>
         
         {/* Core mid info - score with subtext exactly matching "بث رياضي فائق" in picture */}
@@ -162,7 +162,7 @@ export function MatchCard({ match }: { match: any }) {
               />
             </div>
           </div>
-          <span className="text-[11px] sm:text-xs md:text-sm font-black text-gray-900 mt-1 line-clamp-1">{match.teamB || "ريال مدريد"}</span>
+          <span className="text-[11px] sm:text-xs md:text-sm font-black text-gray-900 mt-1 line-clamp-2 min-h-[16px] sm:min-h-[20px] break-words leading-tight">{match.teamB || "ريال مدريد"}</span>
         </div>
       </div>
 
