@@ -1,0 +1,103 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 3. Primitive Definition
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isSignedIn() { return request.auth != null; }
+    function isVerified() { return isSignedIn() && request.auth.token.email_verified == true; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    
+    // Admin check: either in admins collection or matching specific developer email
+    function isAdmin() { 
+      return isVerified() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.email.lower() == "mofeedzaru@gmail.com"
+      ); 
+    }
+
+    // 2. Validation Helpers
+    function isValidMatch(data) {
+      return data.teamA is string && data.teamA.size() <= 100 &&
+             data.teamB is string && data.teamB.size() <= 100 &&
+             data.status in ["upcoming", "live", "finished"];
+    }
+
+    function isValidChannel(data) {
+      return data.name is string && data.name.size() <= 100 &&
+             data.url is string && data.url.size() <= 1000 &&
+             data.type in ["hls", "mp4", "iframe"];
+    }
+
+    function isValidMedia(data) {
+      return data.title is string && data.title.size() <= 200 &&
+             data.type in ["movie", "series"];
+    }
+
+    function isValidUser(data) {
+      return data.email is string && data.email.size() <= 100;
+    }
+
+    function isValidFavorite(data) {
+      return data.userId == request.auth.uid &&
+             data.itemId is string && data.itemId.size() <= 128 &&
+             data.type in ["match", "channel", "media"];
+    }
+
+    // --- Collections ---
+
+    match /matches/{matchId} {
+      allow read, write: if true;
+    }
+
+    match /channels/{channelId} {
+      allow read, write: if true;
+    }
+
+    match /media/{mediaId} {
+      allow read, write: if true;
+      
+      match /episodes/{episodeId} {
+        allow read, write: if true;
+      }
+    }
+
+    match /favorites/{favoriteId} {
+      // Query Enforcer: Must filter by userId
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow get: if isOwner(existing().userId);
+      allow create: if isVerified() && isValidFavorite(incoming()) && incoming().createdAt == request.time;
+      allow delete: if isOwner(existing().userId);
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isVerified() && isOwner(userId) && isValidUser(incoming()) && incoming().createdAt == request.time;
+      allow update: if isVerified() && isOwner(userId) && isValidUser(incoming()) && 
+                    incoming().diff(existing()).affectedKeys().hasOnly(['favorites', 'watchHistory', 'displayName', 'photoURL']);
+    }
+
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /configs/{configId} {
+      allow read, write: if true;
+    }
+
+    match /categories/{categoryId} {
+      allow read, write: if true;
+    }
+
+    match /leagues/{leagueId} {
+      allow read, write: if true;
+    }
+  }
+}

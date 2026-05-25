@@ -1,0 +1,149 @@
+{
+  "entities": {
+    "Match": {
+      "title": "Match",
+      "description": "A sports match entity",
+      "type": "object",
+      "properties": {
+        "teamA": { "type": "string" },
+        "teamB": { "type": "string" },
+        "logoA": { "type": "string" },
+        "logoB": { "type": "string" },
+        "time": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["upcoming", "live", "finished"] },
+        "channelId": { "type": "string" },
+        "commentator": { "type": "string" },
+        "league": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["teamA", "teamB", "time", "status"]
+    },
+    "Channel": {
+      "title": "Channel",
+      "description": "A live stream channel",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "logo": { "type": "string" },
+        "type": { "type": "string", "enum": ["hls", "mp4", "iframe"] },
+        "url": { "type": "string" },
+        "group": { "type": "string", "enum": ["sports", "news", "movies", "documentary"] },
+        "isPremium": { "type": "boolean" }
+      },
+      "required": ["name", "url", "type", "group"]
+    },
+    "Media": {
+      "title": "Media",
+      "description": "Movie or Series entity",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "type": { "type": "string", "enum": ["movie", "series"] },
+        "category": { "type": "string" },
+        "poster": { "type": "string" },
+        "description": { "type": "string" },
+        "rating": { "type": "number" },
+        "year": { "type": "integer" },
+        "trailerUrl": { "type": "string" },
+        "streamUrl": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "type", "category"]
+    },
+    "User": {
+      "title": "User",
+      "description": "App user profile",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "favorites": { "type": "array" },
+        "watchHistory": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Admin user list",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" }
+      },
+      "required": ["email"]
+    },
+    "Favorite": {
+      "title": "Favorite",
+      "description": "User favorite items",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "itemId": { "type": "string" },
+        "type": { "type": "string", "enum": ["match", "channel", "media"] },
+        "data": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "itemId", "type"]
+    },
+    "League": {
+      "title": "League",
+      "description": "Sports leagues or tournaments",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "logo": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name"]
+    },
+    "Config": {
+      "title": "Config",
+      "description": "System or Ad configuration document",
+      "type": "object",
+      "properties": {
+        "appcreator24HardNav": { "type": "boolean" },
+        "startioWebBanner": { "type": "string" },
+        "popunderCode": { "type": "string" },
+        "interstitialCode": { "type": "string" },
+        "startioAppId": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "firestore": {
+    "/configs/{configId}": {
+      "schema": "Config",
+      "description": "System or Ad configurations"
+    },
+    "/matches/{matchId}": {
+      "schema": "Match",
+      "description": "Sports matches"
+    },
+    "/leagues/{leagueId}": {
+      "schema": "League",
+      "description": "Match Tournaments/Leagues"
+    },
+    "/channels/{channelId}": {
+      "schema": "Channel",
+      "description": "Live channels"
+    },
+    "/media/{mediaId}": {
+      "schema": "Media",
+      "description": "Movies and series"
+    },
+    "/favorites/{favoriteId}": {
+      "schema": "Favorite",
+      "description": "User favorite items"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/admins/{adminId}": {
+      "schema": "Admin",
+      "description": "List of system admins"
+    }
+  }
+}
