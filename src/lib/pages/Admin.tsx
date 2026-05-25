@@ -89,10 +89,12 @@ export function Admin() {
     setMediaCategoryFilter("all");
   }, [tab]);
 
+  // Added scoreA and scoreB to matchForm
   const [matchForm, setMatchForm] = useState({
     teamA: "", teamB: "", logoA: "", logoB: "",
     time: "", status: "upcoming", channel: "",
-    commentator: "", league: "", streamUrl: "", audioUrl: ""
+    commentator: "", league: "", streamUrl: "", audioUrl: "",
+    scoreA: "", scoreB: ""
   });
 
   const [channelForm, setChannelForm] = useState({
@@ -394,8 +396,12 @@ export function Admin() {
         }
       }
 
-      // Reset forms
-      if (type === 'match') setMatchForm({ teamA: "", teamB: "", logoA: "", logoB: "", time: "", status: "upcoming", channel: "", commentator: "", league: "", streamUrl: "", audioUrl: "" });
+      // Reset forms (including score fields)
+      if (type === 'match') setMatchForm({ 
+        teamA: "", teamB: "", logoA: "", logoB: "", time: "", 
+        status: "upcoming", channel: "", commentator: "", league: "", 
+        streamUrl: "", audioUrl: "", scoreA: "", scoreB: "" 
+      });
       if (type === 'channel') setChannelForm({ name: "", logo: "", url: "", type: "hls", group: "sports", audioUrl: "" });
       if (type === 'media' && !editId && mediaForm.type !== 'series') {
         setMediaForm({ title: "", type: "movie", category: "arabic_movies", poster: "", description: "", rating: 0, year: new Date().getFullYear(), streamUrl: "", trailerUrl: "", audioUrl: "" });
@@ -643,7 +649,13 @@ export function Admin() {
   const startEdit = (item: any, type: 'match' | 'channel' | 'media' | 'category' | 'league') => {
     setEditId(item.id);
     setTab(type);
-    if (type === 'match') setMatchForm({ ...item });
+    if (type === 'match') {
+      setMatchForm({ 
+        ...item, 
+        scoreA: item.scoreA || "", 
+        scoreB: item.scoreB || "" 
+      });
+    }
     if (type === 'channel') setChannelForm({ ...item });
     if (type === 'media') {
       setMediaForm({ ...item });
@@ -1068,6 +1080,31 @@ export function Admin() {
                 <label className="text-[10px] sm:text-xs text-gray-500 mr-2">شعار الفريق الثاني (رابط صورة)</label>
                 <input placeholder="https://..." required value={matchForm.logoB} onChange={e => setMatchForm({...matchForm, logoB: e.target.value})} className="w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl px-2.5 py-2 sm:px-4 sm:py-3 focus:border-brand outline-none text-xs sm:text-sm text-[#0f172a] dark:text-white" />
               </div>
+              
+              {/* New Score Fields */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[10px] sm:text-xs text-gray-500 mr-2">هدف الفريق الأول</label>
+                  <input 
+                    type="number" 
+                    placeholder="0" 
+                    value={matchForm.scoreA} 
+                    onChange={e => setMatchForm({...matchForm, scoreA: e.target.value})} 
+                    className="w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl px-2.5 py-2 sm:px-4 sm:py-3 focus:border-brand outline-none text-xs sm:text-sm text-[#0f172a] dark:text-white text-center" 
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] sm:text-xs text-gray-500 mr-2">هدف الفريق الثاني</label>
+                  <input 
+                    type="number" 
+                    placeholder="0" 
+                    value={matchForm.scoreB} 
+                    onChange={e => setMatchForm({...matchForm, scoreB: e.target.value})} 
+                    className="w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl px-2.5 py-2 sm:px-4 sm:py-3 focus:border-brand outline-none text-xs sm:text-sm text-[#0f172a] dark:text-white text-center" 
+                  />
+                </div>
+              </div>
+              
               <div className="space-y-1">
                 <label className="text-[10px] sm:text-xs text-gray-500 mr-2">اسم القناة</label>
                 <div className="flex gap-2 w-full">

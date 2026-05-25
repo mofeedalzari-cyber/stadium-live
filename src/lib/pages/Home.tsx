@@ -5,8 +5,8 @@ import { db, handleFirestoreError, OperationType } from "../firebase";
 import { MatchCard } from "../../components/MatchCard";
 import { CategorySection } from "../../components/CategorySection";
 import axios from "axios";
-import { motion } from "motion/react";
-import { Trophy, Tv, Film, MonitorPlay, ChevronLeft, Newspaper, Search, Calendar, Play, Radio, Users, Activity, Flame, Info, Percent } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
+import { Trophy, Tv, Film, MonitorPlay, ChevronLeft, Newspaper, Search, Calendar, Play, Radio, Users, Activity, Flame, Info, Percent, Sparkles } from "lucide-react";
 import { MatchSkeleton } from "../../components/Skeleton";
 import { useSettings } from "../SettingsContext";
 
@@ -113,7 +113,6 @@ export function Home() {
               try {
                 handleFirestoreError(err, OperationType.DELETE, `matches/${match.id}`);
               } catch (reportErr) {
-                // Keep the flow non-breaking for other matches in loop
                 console.error("Reported error:", reportErr);
               }
             }
@@ -121,14 +120,12 @@ export function Home() {
         });
       }
 
-      setMatches(allMatches); // Keep all matches so Match Center has finished/scheduled ones too!
+      setMatches(allMatches);
       setLoading(false);
 
-      // Update Latest All (Matches)
       setLatestAll(prev => {
         const other = prev.filter((i: any) => i.collection !== 'match');
         const combined = [...other, ...activeMatches.slice(0, 4)];
-        // Deduplicate
         const unique = Array.from(new Map(combined.map(item => [`${item.collection}-${item.id}`, item])).values());
         return unique.sort((a: any, b: any) => 
           (b.updatedAt?.toMillis?.() || 0) - (a.updatedAt?.toMillis?.() || 0)
@@ -136,7 +133,6 @@ export function Home() {
       });
     });
 
-    // Categorized Media from Firestore - ordered by latest
     const qMedia = query(collection(db, "media"), orderBy("updatedAt", "desc"), limit(500));
     const unsubMedia = onSnapshot(qMedia, (snap) => {
       const allMedia = snap.docs.map(doc => ({ id: doc.id, ...doc.data(), collection: 'media' }));
@@ -148,11 +144,9 @@ export function Home() {
       setDocumentaries(allMedia.filter((m: any) => m.category === "documentary"));
       setActionMovies(allMedia.filter((m: any) => m.category === "action"));
       
-      // Update Latest All (Media)
       setLatestAll(prev => {
         const other = prev.filter((i: any) => i.collection !== 'media');
         const combined = [...other, ...allMedia.slice(0, 8)];
-        // Deduplicate
         const unique = Array.from(new Map(combined.map(item => [`${item.collection}-${item.id}`, item])).values());
         return unique.sort((a: any, b: any) => 
           (b.updatedAt?.toMillis?.() || 0) - (a.updatedAt?.toMillis?.() || 0)
@@ -160,17 +154,14 @@ export function Home() {
       });
     });
 
-    // Channels
     const qChannels = query(collection(db, "channels"), orderBy("updatedAt", "desc"), limit(500));
     const unsubChannels = onSnapshot(qChannels, (snap) => {
       const allChannels = snap.docs.map(doc => ({ id: doc.id, ...doc.data(), collection: 'channel' }));
       setChannels(allChannels);
       
-      // Update Latest All (Channels)
       setLatestAll(prev => {
         const other = prev.filter((i: any) => i.collection !== 'channel');
         const combined = [...other, ...allChannels.slice(0, 8)];
-        // Deduplicate
         const unique = Array.from(new Map(combined.map(item => [`${item.collection}-${item.id}`, item])).values());
         return unique.sort((a: any, b: any) => 
           (b.updatedAt?.toMillis?.() || 0) - (a.updatedAt?.toMillis?.() || 0)
@@ -178,13 +169,11 @@ export function Home() {
       });
     });
 
-    // Custom Categories
     const unsubCats = onSnapshot(collection(db, "categories"), (snap) => {
       const cats = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setCustomCategories(cats);
     });
 
-    // Trending from Proxy API
     axios.get("/api/tmdb/trending")
       .then(res => setTrending(res.data.results || []))
       .catch(err => {
@@ -202,9 +191,7 @@ export function Home() {
 
   const now = new Date();
 
-  // Filter Match list
   const filteredMatches = matches.filter((match: any) => {
-    // 1. Search Query filter (Case insensitve matches)
     const q = searchQuery.toLowerCase();
     const matchesSearch = !searchQuery || 
       (match.teamA || "").toLowerCase().includes(q) ||
@@ -214,7 +201,6 @@ export function Home() {
 
     if (!matchesSearch) return false;
 
-    // 2. Status / Tabs filter
     const matchDate = new Date(match.time);
     const diffMins = (now.getTime() - matchDate.getTime()) / (1000 * 60);
     const isLive = match.status === "live" || (match.status !== "finished" && diffMins >= 0 && diffMins <= 120);
@@ -223,173 +209,175 @@ export function Home() {
     if (activeTab === "live") return isLive;
     if (activeTab === "upcoming") return !isLive && !isFinished;
     if (activeTab === "finished") return isFinished;
-    return true; // "all"
+    return true;
   });
 
-  // Dedicated dark luxury themed "Match Center" screen when loading /matches
   if (isMatchesPage) {
     return (
-      <div className="-mx-3 sm:-mx-6 lg:-mx-12 min-h-screen bg-[#0a0f1d] text-white pb-24 px-4 sm:px-8 lg:px-12 pt-6 font-sans text-right" style={{ direction: "rtl" }}>
-        
-        {/* Global tab manager filters + real time match search */}
-        <div className="bg-[#141f32] rounded-[2rem] p-5 sm:p-6 border border-white/5 shadow-md mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4.5">
-          {/* Dynamic Tabs list */}
+      <div className="-mx-3 sm:-mx-6 lg:-mx-12 min-h-screen bg-gradient-to-b from-[#0a0f1d] to-[#05080f] text-white pb-24 px-4 sm:px-8 lg:px-12 pt-6 font-sans text-right" style={{ direction: "rtl" }}>
+        <div className="bg-[#141f32]/50 backdrop-blur-sm rounded-[2rem] p-5 sm:p-6 border border-white/10 shadow-xl mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
             {[
-              { id: "all", label: "كل المباريات" },
-              { id: "live", label: "مباشر الآن 🟢" },
-              { id: "upcoming", label: "المباريات القادمة ⚽" },
-              { id: "finished", label: "المنتهية 🏁" }
+              { id: "all", label: "كل المباريات", icon: Activity },
+              { id: "live", label: "مباشر الآن", icon: Radio, live: true },
+              { id: "upcoming", label: "القادمة", icon: Calendar },
+              { id: "finished", label: "المنتهية", icon: Trophy }
             ].map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold whitespace-nowrap transition-all duration-300 active:scale-95 focus:outline-none ${
+                className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-extrabold whitespace-nowrap transition-all duration-300 active:scale-95 flex items-center gap-1.5 ${
                   activeTab === tab.id 
                     ? "bg-brand text-slate-950 shadow-md shadow-brand/20" 
                     : "bg-slate-900/50 text-gray-400 hover:text-white border border-white/5"
                 }`}
               >
+                {tab.icon && <tab.icon className="w-3.5 h-3.5" />}
                 {tab.label}
+                {tab.live && activeTab === tab.id && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />}
               </button>
             ))}
           </div>
 
-          {/* Matches live search */}
           <div className="relative group max-w-sm w-full">
-            <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-gray-400 group-focus-within:text-[#00C2FF] transition-colors" />
+            <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-brand transition-colors" />
             <input 
               type="text" 
               placeholder="ابحث بالفريق، البطولة، أو المعلق..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="w-full bg-[#0a0f1d]/75 border border-white/5 rounded-2xl py-2.5 pr-11 pl-4 text-xs sm:text-sm outline-none focus:border-[#00C2FF]/60 focus:bg-[#141f32] transition-all text-white placeholder-gray-500 focus:ring-4 focus:ring-[#00C2FF]/10"
+              className="w-full bg-[#0a0f1d]/80 border border-white/10 rounded-xl py-2.5 pr-10 pl-4 text-sm outline-none focus:border-brand/60 focus:bg-[#141f32] transition-all text-white placeholder-gray-500"
             />
           </div>
         </div>
 
-        {/* Matches listings dashboard scaled to full-width */}
         <div className="w-full space-y-6">
-          <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2 mb-4">
-            <Radio className="w-5 h-5 text-brand animate-pulse" />
-            <span>نتائج ولقاءات التصفية ({filteredMatches.length})</span>
-          </h2>
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-1 h-6 bg-brand rounded-full" />
+            <h2 className="text-base sm:text-lg font-black flex items-center gap-2">
+              <Radio className="w-4 h-4 text-brand animate-pulse" />
+              <span>نتائج ولقاءات التصفية ({filteredMatches.length})</span>
+            </h2>
+          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {loading ? (
               [1, 2, 3, 4].map(idx => <MatchSkeleton key={idx} />)
             ) : filteredMatches.length > 0 ? (
               filteredMatches.map((m: any, idx: number) => (
-                <div key={`${m.id}-${idx}`} className="w-full">
+                <motion.div 
+                  key={`${m.id}-${idx}`}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.05 }}
+                  className="w-full"
+                >
                   <MatchCard match={m} />
-                </div>
+                </motion.div>
               ))
             ) : (
-              <div className="col-span-full bg-[#141f32] rounded-3xl p-16 text-center border border-white/5 flex flex-col items-center justify-center space-y-4">
-                <div className="w-16 h-16 bg-[#0a0f1d]/30 rounded-full flex items-center justify-center border border-white/5">
+              <div className="col-span-full bg-[#141f32]/50 rounded-3xl p-12 text-center border border-white/5 flex flex-col items-center justify-center space-y-3">
+                <div className="w-16 h-16 bg-[#0a0f1d]/50 rounded-full flex items-center justify-center border border-white/5">
                   <Trophy className="w-8 h-8 text-gray-600" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-extrabold text-white">لا يوجد مباريات تطابق هذا التصنيف</h3>
+                  <h3 className="text-sm font-extrabold text-white">لا توجد مباريات تطابق هذا التصنيف</h3>
                   <p className="text-xs text-gray-500 mt-1">تأكد من كتابة أحرف البحث بشكل صحيح أو انتقل لتبويب آخر</p>
                 </div>
               </div>
             )}
           </div>
         </div>
-
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 md:space-y-12 pb-24 px-3 sm:px-6 lg:px-0 overflow-x-hidden text-right" style={{ direction: "rtl" }}>
+    <div className="max-w-7xl mx-auto space-y-8 md:space-y-12 pb-24 px-4 sm:px-6 lg:px-8 overflow-x-hidden text-right" style={{ direction: "rtl" }}>
       
-      {/* 2. Dynamic Continue Watching (أكمل المشاهدة) Section */}
-      {!isMatchesPage && continueWatching.length > 0 && (
-        <section className="bg-white rounded-3xl p-5 sm:p-8 border border-slate-100 shadow-sm relative">
-
-          <div className="flex items-center gap-3 mb-5">
-            <div className="p-2.5 bg-brand/10 rounded-2xl border border-brand/15 relative">
-              <span className="w-2 h-2 rounded-full bg-brand animate-ping absolute top-0.5 right-0.5" />
-              <Tv className="text-brand w-5 h-5" />
+      {/* Continue Watching Section - Improved Design */}
+      {continueWatching.length > 0 && (
+        <section className="relative">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-brand/10 rounded-xl">
+                <Play className="w-5 h-5 text-brand" />
+              </div>
+              <h2 className="text-lg sm:text-xl font-black">تابع المشاهدة</h2>
             </div>
-            <div>
-              <h2 className="text-base sm:text-lg font-black text-gray-950">تابع المشاهدة</h2>
-              <p className="text-[10px] text-gray-400 mt-0.5">استكمل تشغيل وسائطك وقنواتك الأخيرة من حيث توقفت</p>
-            </div>
+            <span className="text-xs text-gray-400">{continueWatching.length} عنصر</span>
           </div>
-
-          <div 
-            className="flex gap-4 overflow-x-auto pb-2 scrollbar-none snap-x snap-mandatory horizontal-slider no-scrollbar scroll-smooth"
-            style={{ WebkitOverflowScrolling: "touch", overscrollBehaviorX: "contain" }}
-          >
-            {continueWatching.map((item: any) => (
-              <motion.div 
-                key={`${item.type}-${item.id}`}
-                whileHover={{ y: -5, scale: 1.02 }}
-                className="flex-shrink-0 w-[120px] sm:w-[150px] snap-start relative group"
-              >
-                <Link to={item.type === 'match' ? `/match/${item.id}` : `/${item.type}/${item.id}`} className="block">
-                  <div className="relative aspect-[16/10] sm:aspect-video rounded-2xl overflow-hidden bg-slate-50 border border-slate-100 group shadow-sm">
-                    {item.type === 'match' ? (
-                      <div className="w-full h-full flex items-center justify-center gap-1.5 p-2 bg-slate-100">
-                        <img src={item.logoA || "https://placehold.co/50x50/f1f5f9/000?text=A"} alt="Logo A" className="w-6 h-6 object-contain" />
-                        <span className="text-gray-400 text-[8px]">VS</span>
-                        <img src={item.logoB || "https://placehold.co/50x50/f1f5f9/000?text=B"} alt="Logo B" className="w-6 h-6 object-contain" />
+          
+          <div className="relative">
+            <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-none snap-x snap-mandatory">
+              {continueWatching.map((item: any, idx: number) => (
+                <motion.div 
+                  key={`${item.type}-${item.id}`}
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: idx * 0.05 }}
+                  whileHover={{ y: -4, scale: 1.02 }}
+                  className="flex-shrink-0 w-[140px] sm:w-[160px] snap-start group"
+                >
+                  <Link to={item.type === 'match' ? `/match/${item.id}` : `/${item.type}/${item.id}`} className="block">
+                    <div className="relative rounded-xl overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900 shadow-md group-hover:shadow-xl transition-all duration-300">
+                      <div className="aspect-video">
+                        {item.type === 'match' ? (
+                          <div className="w-full h-full flex items-center justify-center gap-2 p-3 bg-gray-100 dark:bg-gray-800">
+                            <img src={item.logoA || "https://placehold.co/50x50/f1f5f9/000?text=A"} alt="Logo A" className="w-8 h-8 object-contain" />
+                            <span className="text-gray-400 text-[10px] font-bold">VS</span>
+                            <img src={item.logoB || "https://placehold.co/50x50/f1f5f9/000?text=B"} alt="Logo B" className="w-8 h-8 object-contain" />
+                          </div>
+                        ) : (
+                          <img 
+                            src={item.type === 'channel' ? (item.logo || "https://placehold.co/100/f1f5f9/000?text=?") : (item.poster || "https://placehold.co/100/f1f5f9/000?text=?")} 
+                            alt={item.name} 
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          />
+                        )}
                       </div>
-                    ) : (
-                      <img 
-                        src={item.type === 'channel' ? (item.logo || "https://placehold.co/100/f1f5f9/000?text=?") : (item.poster || "https://placehold.co/100/f1f5f9/000?text=?")} 
-                        alt={item.name} 
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                      />
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
-                    
-                    {/* Tiny Play Progress Indicator Bar */}
-                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-brand/30">
-                      <div className="h-full bg-brand" style={{ width: '65%' }} />
+                      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200 dark:bg-gray-700">
+                        <div className="h-full bg-brand rounded-full" style={{ width: '65%' }} />
+                      </div>
+                      <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md">
+                        {item.type === 'channel' ? 'قناة' : item.type === 'match' ? 'مباراة' : 'سينما'}
+                      </div>
                     </div>
-
-                    <div className="absolute top-1.5 right-1.5 bg-brand text-white text-[8px] font-black px-1.5 py-0.5 rounded-md">
-                      {item.type === 'channel' ? 'قناة' : item.type === 'match' ? 'مباراة' : 'سينما'}
-                    </div>
-                  </div>
-                  <h4 className="mt-1.5 font-bold text-[9px] min-[370px]:text-[10px] sm:text-xs leading-tight text-gray-900 group-hover:text-brand transition-colors text-center line-clamp-2 min-h-[25px] sm:min-h-[32px] overflow-hidden px-0.5 break-words" title={item.name}>
-                    {item.name}
-                  </h4>
-                </Link>
-              </motion.div>
-            ))}
+                    <h4 className="mt-2 font-bold text-xs sm:text-sm text-center line-clamp-2 group-hover:text-brand transition-colors">
+                      {item.name}
+                    </h4>
+                  </Link>
+                </motion.div>
+              ))}
+            </div>
           </div>
         </section>
       )}
 
-      {/* 3. Today's Matches Section - replaced mixed portrait cards with real MatchCards */}
-      {!isMatchesPage && matches.some((m: any) => {
+      {/* Live Matches Section - Enhanced */}
+      {matches.some((m: any) => {
         const matchDate = new Date(m.time);
         const diffMinutes = (now.getTime() - matchDate.getTime()) / (1000 * 60);
         return m.status === "live" || (m.status !== "finished" && diffMinutes >= 0 && diffMinutes <= 120);
       }) && (
-        <section className="bg-white rounded-3xl p-5 sm:p-7 border border-slate-100 shadow-sm relative">
-          <div className="flex items-center justify-between mb-5">
-            <div className="flex items-center gap-2 min-w-0 text-right">
-              <span className="w-1.5 h-4 bg-brand rounded-full shadow-[0_2px_10px_rgba(37,99,235,0.3)] shrink-0"></span>
-              <h2 className="text-sm sm:text-base font-black text-gray-950 flex items-center gap-2">
-                <span>مباريات اليوم والتشغيل المباشر 🔴</span>
+        <section className="relative">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-1.5 h-6 bg-red-500 rounded-full animate-pulse" />
+              <h2 className="text-lg sm:text-xl font-black flex items-center gap-2">
+                <span>المباريات المباشرة 🔴</span>
                 {matches.filter((m: any) => m.status === "live").length > 0 && (
-                  <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full animate-pulse shrink-0">
-                    مباشر الآن
+                  <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                    {matches.filter((m: any) => m.status === "live").length} مباشر
                   </span>
                 )}
               </h2>
             </div>
             <Link 
               to="/matches" 
-              className="px-3 py-1.5 rounded-xl bg-slate-50 text-[10px] sm:text-xs font-bold text-gray-500 hover:text-brand hover:bg-brand/10 border border-slate-150 transition-all flex items-center gap-0.5 shrink-0"
+              className="text-xs font-bold text-gray-500 hover:text-brand transition-colors flex items-center gap-1"
             >
-              <span>جدول المباريات الكامل</span>
+              <span>جميع المباريات</span>
               <ChevronLeft className="w-3.5 h-3.5" />
             </Link>
           </div>
@@ -399,111 +387,112 @@ export function Home() {
               {[1, 2, 3].map(idx => <MatchSkeleton key={idx} />)}
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               {matches.filter((m: any) => {
                 const matchDate = new Date(m.time);
                 const diffMinutes = (now.getTime() - matchDate.getTime()) / (1000 * 60);
                 const isLive = m.status === "live" || (m.status !== "finished" && diffMinutes >= 0 && diffMinutes <= 120);
                 return isLive;
               }).slice(0, 6).map((m: any, idx: number) => (
-                <div key={`${m.id}-${idx}`} className="w-full">
+                <motion.div 
+                  key={`${m.id}-${idx}`}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.1 }}
+                  className="w-full"
+                >
                   <MatchCard match={m} />
-                </div>
+                </motion.div>
               ))}
             </div>
           )}
         </section>
       )}
 
-      {/* 4. Filtered Video Categories and Movie lists */}
-      {!isMatchesPage && (
-        <div className="space-y-8 pb-10">
-          
-          <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm">
-            <CategorySection 
-              title="القنوات الرياضية الناقلة" 
-              icon={Tv} 
-              items={channels.filter(c => {
-                const g = (c.group || "").toLowerCase();
-                return g === "sports" || g.includes("sport") || g.includes("bein") || g.includes("رياض") || g.includes("دوري") || g.includes("كأس") || g.includes("ssc") || g.includes("alkass");
-              }).slice(0, 15)} 
-              type="channel"
-              filter={{ key: 'group', value: 'sports' }}
-            />
-          </div>
+      {/* Categories Grid - Professional Layout */}
+      <div className="space-y-6">
+        {/* Sports Channels */}
+        <CategorySection 
+          title="القنوات الرياضية" 
+          icon={Tv} 
+          items={channels.filter(c => {
+            const g = (c.group || "").toLowerCase();
+            return g === "sports" || g.includes("sport") || g.includes("bein") || g.includes("رياض") || g.includes("دوري") || g.includes("كأس") || g.includes("ssc") || g.includes("alkass");
+          }).slice(0, 12)} 
+          type="channel"
+          filter={{ key: 'group', value: 'sports' }}
+        />
 
-          <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm">
-            <CategorySection 
-              title="أفلام عربية حصرية" 
-              icon={Film} 
-              items={arabicMovies.slice(0, 15)} 
-              type="media"
-              filter={{ key: 'category', value: 'arabic_movies' }}
-            />
-          </div>
+        {/* Arabic Movies */}
+        <CategorySection 
+          title="أفلام عربية" 
+          icon={Film} 
+          items={arabicMovies.slice(0, 12)} 
+          type="media"
+          filter={{ key: 'category', value: 'arabic_movies' }}
+        />
 
-          <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm">
-            <CategorySection 
-              title="مسلسلات تركية حصرية" 
-              icon={MonitorPlay} 
-              items={turkishSeries.slice(0, 15)} 
-              type="media"
-              filter={{ key: 'category', value: 'turkish_series' }}
-            />
-          </div>
+        {/* Turkish Series */}
+        <CategorySection 
+          title="مسلسلات تركية" 
+          icon={MonitorPlay} 
+          items={turkishSeries.slice(0, 12)} 
+          type="media"
+          filter={{ key: 'category', value: 'turkish_series' }}
+        />
 
-          <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm">
-            <CategorySection 
-              title="أفلام وثائقية عالمية" 
-              icon={MonitorPlay} 
-              items={documentaries.slice(0, 15)} 
-              type="media"
-              filter={{ key: 'category', value: 'documentary' }}
-            />
-          </div>
+        {/* Documentaries */}
+        {documentaries.length > 0 && (
+          <CategorySection 
+            title="وثائقيات" 
+            icon={MonitorPlay} 
+            items={documentaries.slice(0, 12)} 
+            type="media"
+            filter={{ key: 'category', value: 'documentary' }}
+          />
+        )}
 
-          <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm">
-            <CategorySection 
-              title="أفلام أكشن وحركة" 
-              icon={Film} 
-              items={actionMovies.slice(0, 15)} 
-              type="media"
-              filter={{ key: 'category', value: 'action' }}
-            />
-          </div>
+        {/* Action Movies */}
+        {actionMovies.length > 0 && (
+          <CategorySection 
+            title="أفلام أكشن" 
+            icon={Film} 
+            items={actionMovies.slice(0, 12)} 
+            type="media"
+            filter={{ key: 'category', value: 'action' }}
+          />
+        )}
 
-          <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm">
-            <CategorySection 
-              title="القنوات الإخبارية" 
-              icon={Newspaper} 
-              items={channels.filter(c => {
-                const g = (c.group || "").toLowerCase();
-                return g === "news" || g.includes("news") || g.includes("إخبار") || g.includes("أخبار") || g.includes("حدث") || g.includes("جزيرة") || g.includes("عربية");
-              }).slice(0, 15)} 
-              type="channel"
-              filter={{ key: 'group', value: 'news' }}
-            />
-          </div>
+        {/* News Channels */}
+        <CategorySection 
+          title="القنوات الإخبارية" 
+          icon={Newspaper} 
+          items={channels.filter(c => {
+            const g = (c.group || "").toLowerCase();
+            return g === "news" || g.includes("news") || g.includes("إخبار") || g.includes("أخبار") || g.includes("حدث") || g.includes("جزيرة") || g.includes("عربية");
+          }).slice(0, 12)} 
+          type="channel"
+          filter={{ key: 'group', value: 'news' }}
+        />
 
-          {customCategories.map(cat => {
-            const catItems = cat.type === 'channel'
-              ? channels.filter((c: any) => (c.group || "").toLowerCase() === cat.id.toLowerCase())
-              : allMediaItems.filter((m: any) => (m.category || "").toLowerCase() === cat.id.toLowerCase());
-            if (catItems.length === 0) return null;
-            return (
-              <div key={cat.id} className="bg-[#141f32]/80 backdrop-blur-md rounded-3xl p-5 border border-white/5 shadow-lg">
-                <CategorySection 
-                  title={cat.name} 
-                  icon={cat.type === 'channel' ? Tv : cat.type === 'movie' ? Film : MonitorPlay} 
-                  items={catItems.slice(0, 15)} 
-                  type={cat.type === 'channel' ? "channel" : "media"}
-                  filter={cat.type === 'channel' ? { key: 'group', value: cat.id } : { key: 'category', value: cat.id }}
-                />
-              </div>
-            );
-          })}
-        </div>
-      )}
+        {/* Custom Categories */}
+        {customCategories.map(cat => {
+          const catItems = cat.type === 'channel'
+            ? channels.filter((c: any) => (c.group || "").toLowerCase() === cat.id.toLowerCase())
+            : allMediaItems.filter((m: any) => (m.category || "").toLowerCase() === cat.id.toLowerCase());
+          if (catItems.length === 0) return null;
+          return (
+            <CategorySection 
+              key={cat.id}
+              title={cat.name} 
+              icon={cat.type === 'channel' ? Tv : cat.type === 'movie' ? Film : MonitorPlay} 
+              items={catItems.slice(0, 12)} 
+              type={cat.type === 'channel' ? "channel" : "media"}
+              filter={cat.type === 'channel' ? { key: 'group', value: cat.id } : { key: 'category', value: cat.id }}
+            />
+          );
+        })}
+      </div>
     </div>
   );
 }
