@@ -42,7 +42,7 @@ export function MatchDetails() {
     return (
       <div className="p-24 text-center text-gray-400 bg-[#040406] min-h-screen font-sans flex flex-col items-center justify-center space-y-4">
         <RefreshCw className="w-10 h-10 text-[#FF1E3A] animate-spin" />
-        <p className="font-extrabold text-sm">جاري تحميل البث الفاخر...</p>
+        <p className="font-extrabold text-sm">جاري تحميل البث...</p>
       </div>
     );
   }
@@ -63,8 +63,8 @@ export function MatchDetails() {
   const isLive = match.status === "live" || (match.status !== "finished" && diffMinutes >= 0 && diffMinutes <= 120);
   const isFinished = match.status === "finished" || diffMinutes > 120;
 
-  const scoreA = match.scoreA !== undefined && match.scoreA !== null ? match.scoreA : (isLive ? "2" : isFinished ? "1" : "0");
-  const scoreB = match.scoreB !== undefined && match.scoreB !== null ? match.scoreB : (isLive ? "1" : isFinished ? "2" : "0");
+  const scoreA = match.scoreA !== undefined && match.scoreA !== null ? match.scoreA : (isLive ? "0" : isFinished ? "0" : "0");
+  const scoreB = match.scoreB !== undefined && match.scoreB !== null ? match.scoreB : (isLive ? "0" : isFinished ? "0" : "0");
 
   const activeStream = match.streamUrl || "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8";
 
@@ -74,26 +74,26 @@ export function MatchDetails() {
   return (
     <div className="-mx-3 sm:-mx-6 lg:-mx-12 min-h-screen bg-[#040406] text-white pb-24 px-4 sm:px-8 lg:px-12 pt-4 font-sans text-right" style={{ direction: "rtl" }}>
       
-      {/* Dynamic Back-button and layout navigation */}
-      <div className="max-w-5xl mx-auto flex items-center justify-between mb-6">
+      {/* Header with back button and badge */}
+      <div className="max-w-5xl mx-auto flex items-center justify-between mb-4">
         <Link 
           to="/matches" 
-          className="flex items-center gap-2 px-4 py-2 bg-[#0c0f17] rounded-xl border border-white/5 hover:bg-black/40 text-xs sm:text-sm font-extrabold text-[#A1A1AA] hover:text-white transition-all shadow-sm active:scale-95"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0c0f17] rounded-lg border border-white/5 hover:bg-black/40 text-[11px] font-extrabold text-[#A1A1AA] hover:text-white transition-all shadow-sm active:scale-95"
         >
-          <ArrowLeft className="w-4 h-4 text-[#00C2FF]" />
+          <ArrowLeft className="w-3.5 h-3.5 text-[#00C2FF]" />
           <span>العودة للمباريات</span>
         </Link>
-        <div className="flex items-center gap-1 bg-[#0c0f17] border border-white/5 px-3 py-1 text-xs rounded-xl font-black text-[#F59E0B]">
-          <Sparkles className="w-4 h-4 text-[#F59E0B] animate-pulse" />
+        <div className="flex items-center gap-1 bg-[#0c0f17] border border-white/5 px-2.5 py-1 text-[10px] rounded-lg font-black text-[#F59E0B]">
+          <Sparkles className="w-3.5 h-3.5 text-[#F59E0B] animate-pulse" />
           <span>مباراة كبرى</span>
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto space-y-4">
+      <div className="max-w-5xl mx-auto space-y-3">
         
-        {/* Streaming Video Section */}
-        <div className="bg-[#0c0f17] rounded-[1.5rem] sm:rounded-[2rem] border border-white/5 shadow-xl overflow-hidden p-3 sm:p-4">
-          <div className="relative aspect-video w-full bg-black rounded-xl overflow-hidden shadow-2xl">
+        {/* Video Player */}
+        <div className="bg-[#0c0f17] rounded-xl sm:rounded-2xl border border-white/5 shadow-xl overflow-hidden p-2 sm:p-3">
+          <div className="relative aspect-video w-full bg-black rounded-lg overflow-hidden shadow-2xl">
             <VideoPlayer 
               src={activeStream} 
               audioUrl={match.audioUrl}
@@ -101,13 +101,14 @@ export function MatchDetails() {
           </div>
         </div>
 
-        {/* Match scoreboard banner */}
-        <div className="relative rounded-2xl bg-[#0c0f17] border border-white/5 shadow-md overflow-hidden p-3 sm:py-3 sm:px-6">
-          <div className="relative z-10 flex items-center justify-between gap-2">
-            {/* Team A */}
+        {/* Match Info Banner - WIDER to prevent text truncation */}
+        <div className="relative rounded-xl bg-[#0c0f17] border border-white/5 shadow-md overflow-hidden py-3 px-4 sm:py-3 sm:px-6">
+          <div className="relative z-10 flex items-center justify-between gap-3 sm:gap-4">
+            
+            {/* Team A - increased width */}
             <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0 justify-end">
-              <span className="text-[10px] min-[390px]:text-xs sm:text-sm font-bold text-white truncate max-w-[115px] sm:max-w-none">{teamAName}</span>
-              <div className="w-8 h-8 sm:w-11 sm:h-11 bg-black/40 rounded-full p-1.5 border border-white/10 shadow-sm flex items-center justify-center shrink-0">
+              <span className="text-xs sm:text-sm font-bold text-white whitespace-normal break-words text-right max-w-[130px] sm:max-w-[180px]">{teamAName}</span>
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-black/40 rounded-full p-1 border border-white/10 shadow-sm flex items-center justify-center shrink-0">
                 <img 
                   src={match.logoA || "https://placehold.co/150x150/f4f7fb/111827?text=" + encodeURIComponent(teamAName.slice(0, 3))} 
                   alt={teamAName} 
@@ -116,17 +117,17 @@ export function MatchDetails() {
               </div>
             </div>
 
-            {/* Central score widget */}
-            <div className="flex flex-col items-center justify-center shrink-0 px-2 min-w-[100px] sm:min-w-[140px] text-center border-x border-white/5">
-              <span className="text-[8px] sm:text-[10px] text-gray-400 font-medium mb-1 bg-black/20 px-2 py-0.5 rounded-full border border-white/5 flex items-center gap-1 justify-center shrink-0">
+            {/* Score Widget - wider */}
+            <div className="flex flex-col items-center justify-center shrink-0 px-3 min-w-[110px] sm:min-w-[140px] text-center border-x border-white/5">
+              <span className="text-[8px] sm:text-[9px] text-gray-400 font-medium mb-0.5 bg-black/20 px-2 py-0.5 rounded-full border border-white/5 flex items-center gap-1 justify-center">
                 <Trophy className="w-2.5 h-2.5 text-[#F59E0B]" />
-                <span className="truncate max-w-[80px] sm:max-w-none">{match.league || "دوري أبطال آسيا"}</span>
+                <span className="whitespace-normal break-words max-w-[100px] sm:max-w-[140px]">{match.league || "دوري"}</span>
               </span>
 
               {isLive || isFinished ? (
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2">
                   <span className="text-base sm:text-xl font-black text-white">{scoreA}</span>
-                  <span className="text-white/30 font-bold text-sm">:</span>
+                  <span className="text-white/30 font-bold text-xs">:</span>
                   <span className="text-base sm:text-xl font-black text-white">{scoreB}</span>
                 </div>
               ) : (
@@ -138,34 +139,32 @@ export function MatchDetails() {
               )}
 
               {isLive ? (
-                <div className="flex flex-col items-center gap-1.5 mt-1">
-                  <div className="flex items-center gap-1 bg-[#FF1E3A]/20 border border-[#FF1E3A]/30 text-[#FF1E3A] text-[8px] sm:text-[9px] font-bold px-2 py-0.5 rounded-md animate-pulse">
+                <div className="flex items-center gap-1 mt-1">
+                  <div className="flex items-center gap-1 bg-[#FF1E3A]/20 border border-[#FF1E3A]/30 text-[#FF1E3A] text-[7px] sm:text-[8px] font-bold px-2 py-0.5 rounded-md animate-pulse">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#FF1E3A] animate-ping"></span>
                     <span>مباشر</span>
                   </div>
                 </div>
               ) : isFinished ? (
-                <div className="text-gray-500 text-[8px] sm:text-[9px] font-bold mt-1">
-                  انتهت
-                </div>
+                <div className="text-gray-500 text-[7px] sm:text-[8px] font-bold mt-1">انتهت</div>
               ) : (
-                <div className="text-[#FF1E3A] text-[8px] sm:text-[9px] font-bold mt-1 flex items-center gap-0.5">
+                <div className="text-[#FF1E3A] text-[7px] sm:text-[8px] font-bold mt-1 flex items-center gap-1">
                   <Clock className="w-2.5 h-2.5 animate-spin" />
                   <span>قريباً</span>
                 </div>
               )}
             </div>
 
-            {/* Team B */}
+            {/* Team B - increased width */}
             <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0 justify-start">
-              <div className="w-8 h-8 sm:w-11 sm:h-11 bg-black/40 rounded-full p-1.5 border border-white/10 shadow-sm flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-black/40 rounded-full p-1 border border-white/10 shadow-sm flex items-center justify-center shrink-0">
                 <img 
                   src={match.logoB || "https://placehold.co/150x150/f4f7fb/111827?text=" + encodeURIComponent(teamBName.slice(0, 3))} 
                   alt={teamBName} 
                   className="max-w-full max-h-full object-contain" 
                 />
               </div>
-              <span className="text-[10px] min-[390px]:text-[11px] sm:text-sm font-bold text-white truncate max-w-[115px] sm:max-w-none">{teamBName}</span>
+              <span className="text-xs sm:text-sm font-bold text-white whitespace-normal break-words text-left max-w-[130px] sm:max-w-[180px]">{teamBName}</span>
             </div>
           </div>
         </div>

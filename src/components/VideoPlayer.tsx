@@ -108,7 +108,7 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
   const hlsRef = useRef<Hls | null>(null);
   const dashRef = useRef<dashjs.MediaPlayerClass | null>(null);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const lastTapTimeRef = useRef<number>(0); // Fixed: store lastTap time in ref instead of DOM property
+  const lastTapTimeRef = useRef<number>(0);
   const initCalledRef = useRef<boolean>(false);
 
   const [isPlaying, setIsPlaying] = useState(false);
@@ -171,7 +171,6 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
 
   const resolvedSrc = useProxy ? getProxiedUrl(src) : src;
 
-  // Fixed: Update subtitle tracks using video event listener
   const handleSubtitleTracksUpdate = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -181,7 +180,6 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
     setActiveCaptionsTrack(showIdx);
   }, []);
 
-  // Fixed: Audio sync function with better drift handling
   const handleAudioSync = useCallback(() => {
     if (!audioRef.current || !videoRef.current) return;
     const vTime = videoRef.current.currentTime;
@@ -191,7 +189,6 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
     }
   }, []);
 
-  // Fixed: Reconnection failover with exponential backoff
   const handleFatalFailover = useCallback((reason: string) => {
     if (retryCount < maxRetries) {
       setIsReconnecting(true);
@@ -200,7 +197,7 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
       triggerToast(`اتصال متذبذب. يتم فحص جودة السيرفر... (${nextRetry}/${maxRetries})`);
       setTimeout(() => {
         initPlayer();
-      }, Math.min(2000 * retryCount, 10000)); // Exponential backoff
+      }, Math.min(2000 * retryCount, 10000));
     } else {
       setHasError(true);
       setErrorDetails(reason);
@@ -208,7 +205,6 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
     }
   }, [retryCount, maxRetries]);
 
-  // Fixed: Main player initialization without dependency on volume/playbackRate to avoid reinitialization
   const initPlayer = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -226,7 +222,6 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
       dashRef.current = null;
     }
 
-    // Remove old text track listeners before adding new ones
     video.removeEventListener('addtrack', handleSubtitleTracksUpdate);
     video.removeEventListener('removetrack', handleSubtitleTracksUpdate);
     video.removeEventListener('loadedmetadata', handleSubtitleTracksUpdate);
@@ -309,21 +304,17 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
       video.src = resolvedSrc;
     }
 
-    // Apply initial volume, mute, and playback rate without reinitializing player
     video.muted = isMuted;
     video.volume = volume;
     video.playbackRate = playbackRate;
 
-    // Fixed: Use proper video event listeners for subtitle tracks
     video.addEventListener("loadedmetadata", handleSubtitleTracksUpdate);
     video.addEventListener("addtrack", handleSubtitleTracksUpdate);
     video.addEventListener("removetrack", handleSubtitleTracksUpdate);
     
-    // Initial call to populate tracks
     handleSubtitleTracksUpdate();
-  }, [resolvedSrc, autoplay, handleFatalFailover, handleSubtitleTracksUpdate]); // Removed volume, isMuted, playbackRate
+  }, [resolvedSrc, autoplay, handleFatalFailover, handleSubtitleTracksUpdate]);
 
-  // Fixed: Separate effect for volume and playback rate changes without reinitializing player
   useEffect(() => {
     const video = videoRef.current;
     if (video) {
@@ -346,7 +337,6 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
     }
   }, [playbackRate]);
 
-  // Initialize player only when src or proxy changes
   useEffect(() => {
     initPlayer();
     setRetryCount(0);
@@ -366,13 +356,11 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
         video.removeEventListener('loadedmetadata', handleSubtitleTracksUpdate);
       }
     };
-  }, [src, useProxy]); // Only depends on src and useProxy, not on initPlayer
+  }, [src, useProxy]);
 
-  // Fixed: Audio synchronization interval with better checks
   useEffect(() => {
     if (!audioUrl || !isPlaying) return;
     let syncInterval: NodeJS.Timeout | null = null;
-    // Wait for audio element to be ready
     const startSync = () => {
       if (syncInterval) clearInterval(syncInterval);
       syncInterval = setInterval(() => {
@@ -380,7 +368,6 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
         const audio = audioRef.current;
         if (!video || !audio) return;
         
-        // Ensure audio element is ready
         if (audio.readyState < 2) return;
         
         if (video.paused && !audio.paused) {
@@ -393,10 +380,9 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
         if (drift > 0.15 && !video.seeking && audio.readyState >= 2) {
           audio.currentTime = video.currentTime;
         }
-      }, 250); // Reduced frequency to 250ms to avoid stuttering
+      }, 250);
     };
     
-    // Small delay to allow audio element to load metadata
     const timer = setTimeout(startSync, 100);
     return () => {
       clearTimeout(timer);
@@ -404,7 +390,6 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
     };
   }, [isPlaying, audioUrl]);
 
-  // Fixed: handle audio play/pause when isPlaying changes
   useEffect(() => {
     const video = videoRef.current;
     const audio = audioRef.current;
@@ -429,7 +414,6 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
     setDuration(video.duration || 0);
     setIsLive(video.duration === Infinity || video.duration === 0);
 
-    // Only update buffered ranges if they actually changed (simple check)
     const len = video.buffered.length;
     let changed = false;
     if (len !== buffered.length) changed = true;
@@ -571,7 +555,6 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
             abr: { autoSwitchBitrate: { video: false } }
           }
         });
-        // Safer quality set for dashjs
         if (dashRef.current.setQualityFor) {
           dashRef.current.setQualityFor("video", levelId, true);
         } else if ((dashRef.current as any).setQualityFor) {
@@ -660,7 +643,6 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
     }
   };
 
-  // Touch gesture handlers
   const handleTouchStart = (e: React.TouchEvent) => {
     if (isLocked) return;
     const touch = e.touches[0];
@@ -772,7 +754,6 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
     }
   };
 
-  // Keyboard navigation
   const handleTVKeyboard = useCallback((e: KeyboardEvent) => {
     if (!showControls) {
       wakeControls();
@@ -935,53 +916,52 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
       )}
 
       {toastMessage && (
-        <div className="absolute top-8 left-1/2 -translate-x-1/2 z-[110] bg-[#0E1B2E]/95 border border-[#00C2FF]/30 text-[#F5F7FA] text-xs sm:text-sm font-black px-4.5 py-2.5 rounded-2xl shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-4 duration-300">
-          <div className="flex items-center gap-1.5">
-            <Sparkles className="w-4 h-4 text-[#00C2FF] animate-pulse" />
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[110] bg-[#0E1B2E]/95 border border-[#00C2FF]/30 text-[#F5F7FA] text-[10px] font-black px-3 py-1.5 rounded-xl shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-3 duration-300">
+          <div className="flex items-center gap-1">
+            <Sparkles className="w-3 h-3 text-[#00C2FF] animate-pulse" />
             <span>{toastMessage}</span>
           </div>
         </div>
       )}
 
       {(isReconnecting || (!isPlaying && videoRef.current?.seeking)) && (
-        <div className="absolute inset-0 z-50 bg-[#07111F]/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center">
-          <div className="relative w-18 h-18 mb-4">
-            <span className="absolute inset-0 rounded-full border-4 border-[#0E1B2E] opacity-50" />
-            <span className="absolute inset-0 rounded-full border-4 border-t-[#00C2FF] border-r-[#7C4DFF] animate-spin" />
-            <Activity className="absolute inset-0 m-auto w-6 h-6 text-[#00C2FF] animate-pulse" />
+        <div className="absolute inset-0 z-50 bg-[#07111F]/90 backdrop-blur-md flex flex-col items-center justify-center p-4 text-center">
+          <div className="relative w-12 h-12 mb-2">
+            <span className="absolute inset-0 rounded-full border-3 border-[#0E1B2E] opacity-50" />
+            <span className="absolute inset-0 rounded-full border-3 border-t-[#00C2FF] border-r-[#7C4DFF] animate-spin" />
+            <Activity className="absolute inset-0 m-auto w-5 h-5 text-[#00C2FF] animate-pulse" />
           </div>
-          <h3 className="text-sm sm:text-base font-black text-[#F5F7FA]">جاري تأمين تدفق البث المستقر...</h3>
-          <p className="text-[11px] text-[#A1A1AA] mt-1.5 max-w-xs leading-relaxed">
-            يتم فحص النطاق الترددي وموازنة معدل البث تلقائياً لمنع التقطيع.
+          <h3 className="text-[11px] font-black text-[#F5F7FA]">جاري تأمين البث...</h3>
+          <p className="text-[9px] text-[#A1A1AA] mt-1 max-w-xs leading-relaxed">
+            يتم فحص النطاق الترددي وموازنة معدل البث.
           </p>
         </div>
       )}
 
       {hasError && (
-        <div className="absolute inset-0 z-50 bg-[#07111F]/95 backdrop-blur-lg flex flex-col items-center justify-center p-6 text-center">
-          <div className="w-16 h-16 bg-[#0E1B2E] border border-red-500/20 text-[#00C2FF] rounded-full flex items-center justify-center mb-4">
-            <Wifi className="w-8 h-8 text-red-400 animate-pulse" />
+        <div className="absolute inset-0 z-50 bg-[#07111F]/95 backdrop-blur-lg flex flex-col items-center justify-center p-4 text-center">
+          <div className="w-12 h-12 bg-[#0E1B2E] border border-red-500/20 text-[#00C2FF] rounded-full flex items-center justify-center mb-3">
+            <Wifi className="w-6 h-6 text-red-400 animate-pulse" />
           </div>
-          <h2 className="text-base sm:text-lg font-black text-[#F5F7FA]">انقطع الاتصال بالسيرفر للمباراة 📶</h2>
-          <p className="text-xs sm:text-sm text-[#A1A1AA] max-w-md mt-2 leading-relaxed">
-            هناك حمل مكثف على سيرفر اللقاء. يرجى تفعيل المعايرة التلقائية أو التحويل للاتصال الآمن.
+          <h2 className="text-sm font-black text-[#F5F7FA]">انقطع الاتصال بالسيرفر</h2>
+          <p className="text-[10px] text-[#A1A1AA] max-w-md mt-1 leading-relaxed">
+            هناك حمل مكثف على السيرفر. يرجى تفعيل المعايرة التلقائية.
           </p>
-
-          <div className="flex flex-col sm:flex-row gap-3 mt-6 w-full max-w-sm">
+          <div className="flex flex-col sm:flex-row gap-2 mt-4 w-full max-w-xs">
             <button 
               onClick={() => {
                 setUseProxy(!useProxy);
                 initPlayer();
               }}
-              className="flex-1 bg-[#0E1B2E] hover:bg-[#12223a] text-[#F5F7FA] border border-white/5 font-black text-xs py-2.5 rounded-2xl transition-all shadow-md"
+              className="flex-1 bg-[#0E1B2E] hover:bg-[#12223a] text-[#F5F7FA] border border-white/5 font-black text-[10px] py-1.5 rounded-xl transition-all"
             >
-              {useProxy ? "🔐 تفعيل البروكسي الحامي" : "⚡ الاتصال المباشر"}
+              {useProxy ? "🔐 تفعيل البروكسي" : "⚡ اتصال مباشر"}
             </button>
             <button 
               onClick={initPlayer}
-              className="flex-1 bg-gradient-to-r from-[#00C2FF] to-[#7C4DFF] hover:brightness-110 text-slate-950 font-black text-xs py-2.5 rounded-2xl transition-all shadow-lg"
+              className="flex-1 bg-gradient-to-r from-[#00C2FF] to-[#7C4DFF] hover:brightness-110 text-slate-950 font-black text-[10px] py-1.5 rounded-xl transition-all"
             >
-              إعادة الاتصال الفوري 🔄
+              إعادة الاتصال 🔄
             </button>
           </div>
         </div>
@@ -992,36 +972,33 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
           <button 
             onClick={() => {
               setIsLocked(false);
-              triggerToast("تم إلغاء قفل المشغل 🔓");
+              triggerToast("تم إلغاء القفل 🔓");
             }}
-            className="p-5 rounded-full bg-[#0E1B2E] border border-[#00C2FF]/30 text-[#00C2FF] hover:scale-105 active:scale-95 transition-all shadow-2xl"
+            className="p-3 rounded-full bg-[#0E1B2E] border border-[#00C2FF]/30 text-[#00C2FF] hover:scale-105 active:scale-95 transition-all shadow-2xl"
           >
-            <Unlock className="w-6 h-6 animate-pulse" />
+            <Unlock className="w-5 h-5 animate-pulse" />
           </button>
         </div>
       )}
 
       {gestureIndicator.type && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-[#0E1B2E]/90 border border-[#00C2FF]/30 px-6 py-4 rounded-3xl flex flex-col items-center gap-2 shadow-[0_0_30px_rgba(0,194,255,0.25)] backdrop-blur-md">
-          {gestureIndicator.type === 'seek' && <Sparkles className="w-8 h-8 text-[#00C2FF] animate-bounce" />}
-          {gestureIndicator.type === 'volume' && <Volume2 className="w-8 h-8 text-[#00C2FF]" />}
-          {gestureIndicator.type === 'brightness' && <Lightbulb className="w-8 h-8 text-[#7C4DFF]" />}
-          <span className="text-sm font-black text-white leading-none">{gestureIndicator.value}</span>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-[#0E1B2E]/90 border border-[#00C2FF]/30 px-4 py-3 rounded-2xl flex flex-col items-center gap-1.5 shadow-[0_0_25px_rgba(0,194,255,0.25)] backdrop-blur-md">
+          {gestureIndicator.type === 'seek' && <Sparkles className="w-5 h-5 text-[#00C2FF] animate-bounce" />}
+          {gestureIndicator.type === 'volume' && <Volume2 className="w-5 h-5 text-[#00C2FF]" />}
+          {gestureIndicator.type === 'brightness' && <Lightbulb className="w-5 h-5 text-[#7C4DFF]" />}
+          <span className="text-[11px] font-black text-white leading-none">{gestureIndicator.value}</span>
           {gestureIndicator.percent !== undefined && (
-            <div className="w-24 h-1.5 bg-black/40 rounded-full mt-1 overflow-hidden">
-              <div 
-                className={`h-full ${gestureIndicator.type === 'brightness' ? 'bg-[#7C4DFF]' : 'bg-[#00C2FF]'}`} 
-                style={{ width: `${gestureIndicator.percent}%` }} 
-              />
+            <div className="w-20 h-1 bg-black/40 rounded-full mt-0.5 overflow-hidden">
+              <div className="h-full bg-[#00C2FF]" style={{ width: `${gestureIndicator.percent}%` }} />
             </div>
           )}
         </div>
       )}
 
       {isCasting && (
-        <div className="absolute bottom-24 right-5 z-20 bg-[#00C2FF]/10 border border-[#00C2FF]/30 px-3.5 py-2 rounded-2xl flex items-center gap-2 text-[11px] font-black text-[#00C2FF] backdrop-blur-md animate-pulse">
-          <Cast className="w-4 h-4" />
-          <span>يبث شاشة العرض الآن بالتلفزيون الذكي</span>
+        <div className="absolute bottom-24 right-5 z-20 bg-[#00C2FF]/10 border border-[#00C2FF]/30 px-3 py-1.5 rounded-xl flex items-center gap-1.5 text-[10px] font-black text-[#00C2FF] backdrop-blur-md animate-pulse">
+          <Cast className="w-3.5 h-3.5" />
+          <span>يبث الآن للتلفزيون الذكي</span>
         </div>
       )}
 
@@ -1039,15 +1016,15 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
           </button>
 
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[#00C2FF]/15 border border-[#00C2FF]/25 rounded-2xl text-[10px] sm:text-xs font-black text-[#00C2FF] uppercase select-none shadow-sm">
-              <Activity className="w-3.5 h-3.5 text-[#00C2FF] animate-pulse" />
-              <span>معاير فائق السرعة لقناة Stad</span>
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#00C2FF]/15 border border-[#00C2FF]/25 rounded-xl text-[9px] sm:text-[10px] font-black text-[#00C2FF] uppercase select-none shadow-sm">
+              <Activity className="w-3 h-3 text-[#00C2FF] animate-pulse" />
+              <span>معاير فائق السرعة</span>
             </div>
             
             <button 
               onClick={() => {
                 setIsLocked(true);
-                triggerToast("تم تأمين لوحة التحكم واللمس 🔒");
+                triggerToast("تم تأمين المشغل 🔒");
               }}
               className="w-9 h-9 sm:w-11 sm:h-11 rounded-1.5xl bg-[#0E1B2E]/60 backdrop-blur-md hover:bg-red-950/20 hover:text-red-400 text-[#F5F7FA] border border-white/10 flex items-center justify-center transition-all"
             >
@@ -1064,22 +1041,20 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
                 e.stopPropagation();
                 toggleMuted();
               }}
-              className="pointer-events-auto flex items-center gap-2 px-3.5 py-1.5 bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-400 rounded-xl text-[10px] sm:text-xs font-bold shadow-lg backdrop-blur-md transition-all active:scale-95 animate-pulse"
+              className="pointer-events-auto flex items-center gap-2 px-2.5 py-1.5 bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-400 rounded-lg text-[9px] sm:text-[10px] font-bold shadow-lg backdrop-blur-md transition-all active:scale-95 animate-pulse"
               title="اضغط لتشغيل الصوت"
             >
-              <VolumeX className="w-3.5 h-3.5 text-red-400" />
-              <span>الصوت مكتوم تلقائياً • انقر هنا لتشغيل الصوت 🔊</span>
+              <VolumeX className="w-3 h-3 text-red-400" />
+              <span>الصوت مكتوم • انقر للتشغيل</span>
             </button>
           ) : (
-            <div className="flex items-center gap-2.5 px-3 py-1.5 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 rounded-xl text-[10px] sm:text-xs font-bold shadow-md backdrop-blur-md">
-              <span className="relative flex h-2 w-2">
+            <div className="flex items-center gap-2 px-2.5 py-1.5 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 rounded-lg text-[9px] sm:text-[10px] font-bold shadow-md backdrop-blur-md">
+              <span className="relative flex h-1.5 w-1.5">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
               </span>
               <span>
-                {audioUrl 
-                  ? "🎙️ تم دمج الصوت الخارجي ومزامنته بـ 0ms تأخير" 
-                  : "🔊 الصوت نشط • القناة الصوتية الرئيسية متزامنة"}
+                {audioUrl ? "🎙️ صوت خارجي متزامن" : "🔊 صوت نشط"}
               </span>
             </div>
           )}
@@ -1114,7 +1089,7 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
             <button 
               onClick={() => {
                 setIsRotated(!isRotated);
-                triggerToast(!isRotated ? "تم تفعيل الوضع الأفقي 🔄" : "تم إلغاء الوضع الأفقي 📱");
+                triggerToast(!isRotated ? "وضع أفقي" : "وضع رأسي");
               }}
               className={`w-11 h-11 rounded-xl backdrop-blur-xl border flex items-center justify-center active:scale-95 transition-all shadow-lg ${
                 isRotated 
@@ -1138,10 +1113,10 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
 
         {showSettings && (
           <div 
-            className="absolute bottom-[100px] left-6 max-w-sm w-[290px] bg-[#0E1B2E]/98 border border-[#00C2FF]/10 rounded-2.5rem p-4 shadow-2xl z-50 text-right animate-in fade-in slide-in-from-bottom-3 duration-300 backdrop-blur-2xl"
+            className="absolute bottom-[100px] left-6 max-w-sm w-[280px] bg-[#0E1B2E]/98 border border-[#00C2FF]/10 rounded-2xl p-3 shadow-2xl z-50 text-right animate-in fade-in slide-in-from-bottom-3 duration-300 backdrop-blur-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="grid grid-cols-5 gap-1 p-1 bg-black/40 rounded-2xl border border-white/5 mb-3.5">
+            <div className="grid grid-cols-5 gap-1 p-1 bg-black/40 rounded-xl border border-white/5 mb-3">
               {[
                 { id: "quality", label: "الجودة" },
                 { id: "audio", label: "المعلق" },
@@ -1152,7 +1127,7 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
                 <button
                   key={item.id}
                   onClick={() => setSettingsTab(item.id as any)}
-                  className={`py-1 rounded-xl text-[10px] font-black transition-all text-center whitespace-nowrap ${
+                  className={`py-1 rounded-lg text-[9px] font-black transition-all text-center ${
                     settingsTab === item.id 
                       ? "bg-[#00C2FF] text-slate-950" 
                       : "text-gray-400 hover:text-white"
@@ -1164,27 +1139,27 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
             </div>
 
             {settingsTab === "quality" && (
-              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+              <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
                 <button
                   onClick={() => chooseQuality(-1)}
-                  className={`w-full text-right px-3.5 py-2 rounded-xl text-xs font-bold flex justify-between items-center transition-all ${
+                  className={`w-full text-right px-3 py-1.5 rounded-lg text-[10px] font-bold flex justify-between items-center transition-all ${
                     activeLevel === -1 ? "bg-[#00C2FF]/15 text-[#00C2FF] border border-[#00C2FF]/20" : "text-white/80 hover:bg-white/5"
                   }`}
                 >
-                  <span>جودة تلفزيونية تلقائية (Auto)</span>
-                  {activeLevel === -1 && <span className="w-2 h-2 bg-[#00C2FF] rounded-full shadow-[0_0_8px_#00C2FF]" />}
+                  <span>تلقائي (Auto)</span>
+                  {activeLevel === -1 && <span className="w-1.5 h-1.5 bg-[#00C2FF] rounded-full shadow-[0_0_6px_#00C2FF]" />}
                 </button>
                 {levels.length > 0 ? (
                   levels.map((lvl, index) => (
                     <button
                       key={index}
                       onClick={() => chooseQuality(index)}
-                      className={`w-full text-right px-3.5 py-2 rounded-xl text-xs font-bold flex justify-between items-center transition-all ${
+                      className={`w-full text-right px-3 py-1.5 rounded-lg text-[10px] font-bold flex justify-between items-center transition-all ${
                         activeLevel === index ? "bg-[#00C2FF]/15 text-[#00C2FF] border border-[#00C2FF]/20" : "text-white/80 hover:bg-white/5"
                       }`}
                     >
-                      <span>{lvl.height ? `${lvl.height}p UHD` : `سيرفر ${index + 1}`}</span>
-                      {activeLevel === index && <span className="w-2 h-2 bg-[#00C2FF] rounded-full shadow-[0_0_8px_#00C2FF]" />}
+                      <span>{lvl.height ? `${lvl.height}p` : `سيرفر ${index + 1}`}</span>
+                      {activeLevel === index && <span className="w-1.5 h-1.5 bg-[#00C2FF] rounded-full shadow-[0_0_6px_#00C2FF]" />}
                     </button>
                   ))
                 ) : (
@@ -1194,15 +1169,15 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
                         key={i}
                         onClick={() => {
                           setActiveLevel(i);
-                          triggerToast(`تم تحويل الجودة إلى ${resVal}p HD`);
+                          triggerToast(`جودة ${resVal}p`);
                           setShowSettings(false);
                         }}
-                        className={`w-full text-right px-3.5 py-2 rounded-xl text-xs font-bold flex justify-between items-center transition-all ${
+                        className={`w-full text-right px-3 py-1.5 rounded-lg text-[10px] font-bold flex justify-between items-center transition-all ${
                           activeLevel === i ? "bg-[#00C2FF]/15 text-[#00C2FF] border border-[#00C2FF]/20" : "text-white/80 hover:bg-white/5"
                         }`}
                       >
-                        <span>{resVal}p UltraHD</span>
-                        {activeLevel === i && <span className="w-2 h-2 bg-[#00C2FF] rounded-full shadow-[0_0_8px_#00C2FF]" />}
+                        <span>{resVal}p</span>
+                        {activeLevel === i && <span className="w-1.5 h-1.5 bg-[#00C2FF] rounded-full shadow-[0_0_6px_#00C2FF]" />}
                       </button>
                     ))}
                   </>
@@ -1211,50 +1186,50 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
             )}
 
             {settingsTab === "audio" && (
-              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+              <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
                 {audioTracks.length > 0 ? (
                   audioTracks.map((tr, index) => (
                     <button
                       key={index}
                       onClick={() => chooseAudioTrack(index)}
-                      className={`w-full text-right px-3.5 py-2 rounded-xl text-xs font-bold flex justify-between items-center transition-all ${
+                      className={`w-full text-right px-3 py-1.5 rounded-lg text-[10px] font-bold flex justify-between items-center transition-all ${
                         activeAudioTrack === index ? "bg-[#00C2FF]/15 text-[#00C2FF]" : "text-white/80 hover:bg-white/5"
                       }`}
                     >
-                      <span>{tr.name || `طريقة صوتية ${(index + 1)}`}</span>
-                      {activeAudioTrack === index && <span className="w-2 h-2 bg-[#00C2FF] rounded-full" />}
+                      <span>{tr.name || `مسار ${index + 1}`}</span>
+                      {activeAudioTrack === index && <span className="w-1.5 h-1.5 bg-[#00C2FF] rounded-full" />}
                     </button>
                   ))
                 ) : (
-                  <div className="space-y-2 py-2 px-1 text-[11px] text-gray-400 leading-relaxed font-bold">
-                    <p>المذياع العربي نشط ويغذي البث بالتعليق الرسمي بمزامنة كاملة وتلقائية.</p>
+                  <div className="space-y-1 py-1 px-1 text-[10px] text-gray-400 leading-relaxed font-bold">
+                    <p>المعلق العربي نشط</p>
                   </div>
                 )}
               </div>
             )}
 
             {settingsTab === "captions" && (
-              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+              <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
                 <button
                   onClick={() => chooseCaptionsTrack(-1)}
-                  className={`w-full text-right px-3.5 py-2 rounded-xl text-xs font-bold flex justify-between items-center transition-all ${
+                  className={`w-full text-right px-3 py-1.5 rounded-lg text-[10px] font-bold flex justify-between items-center transition-all ${
                     activeCaptionsTrack === -1 ? "bg-[#00C2FF]/15 text-[#00C2FF] border border-[#00C2FF]/20" : "text-white/80 hover:bg-white/5"
                   }`}
                 >
-                  <span>إيقاف الترجمة الفورية</span>
-                  {activeCaptionsTrack === -1 && <span className="w-2 h-2 bg-[#00C2FF] rounded-full shadow-[0_0_8px_#00C2FF]" />}
+                  <span>إيقاف الترجمة</span>
+                  {activeCaptionsTrack === -1 && <span className="w-1.5 h-1.5 bg-[#00C2FF] rounded-full shadow-[0_0_6px_#00C2FF]" />}
                 </button>
                 {captionsTracks.length > 0 ? (
                   captionsTracks.map((track, index) => (
                     <button
                       key={index}
                       onClick={() => chooseCaptionsTrack(index)}
-                      className={`w-full text-right px-3.5 py-2 rounded-xl text-xs font-bold flex justify-between items-center transition-all ${
+                      className={`w-full text-right px-3 py-1.5 rounded-lg text-[10px] font-bold flex justify-between items-center transition-all ${
                         activeCaptionsTrack === index ? "bg-[#00C2FF]/15 text-[#00C2FF] border border-[#00C2FF]/20" : "text-white/80 hover:bg-white/5"
                       }`}
                     >
-                      <span>{track.label || track.language || `ملف ترجمة ${index + 1}`}</span>
-                      {activeCaptionsTrack === index && <span className="w-2 h-2 bg-[#00C2FF] rounded-full shadow-[0_0_8px_#00C2FF]" />}
+                      <span>{track.label || track.language || `ترجمة ${index + 1}`}</span>
+                      {activeCaptionsTrack === index && <span className="w-1.5 h-1.5 bg-[#00C2FF] rounded-full shadow-[0_0_6px_#00C2FF]" />}
                     </button>
                   ))
                 ) : (
@@ -1264,15 +1239,15 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
                         key={lIdx}
                         onClick={() => {
                           setActiveCaptionsTrack(lIdx);
-                          triggerToast(`تفعيل الترجمة الفورية: ${lang}`);
+                          triggerToast(`ترجمة: ${lang}`);
                           setShowSettings(false);
                         }}
-                        className={`w-full text-right px-3.5 py-2 rounded-xl text-xs font-bold flex justify-between items-center transition-all ${
+                        className={`w-full text-right px-3 py-1.5 rounded-lg text-[10px] font-bold flex justify-between items-center transition-all ${
                           activeCaptionsTrack === lIdx ? "bg-[#00C2FF]/15 text-[#00C2FF] border border-[#00C2FF]/20" : "text-white/80 hover:bg-white/5"
                         }`}
                       >
-                        <span>ترجمة تلقائية - {lang}</span>
-                        {activeCaptionsTrack === lIdx && <span className="w-2 h-2 bg-[#00C2FF] rounded-full shadow-[0_0_8px_#00C2FF]" />}
+                        <span>ترجمة - {lang}</span>
+                        {activeCaptionsTrack === lIdx && <span className="w-1.5 h-1.5 bg-[#00C2FF] rounded-full shadow-[0_0_6px_#00C2FF]" />}
                       </button>
                     ))}
                   </>
@@ -1286,33 +1261,33 @@ export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPla
                   <button
                     key={rate}
                     onClick={() => chooseSpeed(rate)}
-                    className={`w-full text-right px-3.5 py-2 rounded-xl text-xs font-bold flex justify-between items-center transition-all ${
+                    className={`w-full text-right px-3 py-1.5 rounded-lg text-[10px] font-bold flex justify-between items-center transition-all ${
                       playbackRate === rate ? "bg-[#00C2FF]/15 text-[#00C2FF] border border-[#00C2FF]/20" : "text-white/80 hover:bg-white/5"
                     }`}
                   >
-                    <span>{rate === 1 ? "طبيعي (١.٠x)" : `${toArabicNumerals(rate.toString())}x`}</span>
-                    {playbackRate === rate && <span className="w-2 h-2 bg-[#00C2FF] rounded-full shadow-[0_0_8px_#00C2FF]" />}
+                    <span>{rate === 1 ? "طبيعي" : `${toArabicNumerals(rate.toString())}x`}</span>
+                    {playbackRate === rate && <span className="w-1.5 h-1.5 bg-[#00C2FF] rounded-full shadow-[0_0_6px_#00C2FF]" />}
                   </button>
                 ))}
               </div>
             )}
 
             {settingsTab === "help" && (
-              <div className="text-right space-y-2 text-[11px] text-gray-300 px-2">
+              <div className="text-right space-y-2 text-[10px] text-gray-300 px-2">
                 <div className="flex justify-between items-center py-1">
                   <span className="font-bold text-white">وضع البروكسي:</span>
                   <button
                     onClick={() => {
                       setUseProxy(!useProxy);
-                      triggerToast(useProxy ? "تم تعطيل البروكسي (اتصال مباشر)" : "تم تفعيل البروكسي (اتصال آمن)");
+                      triggerToast(useProxy ? "اتصال مباشر" : "بروكسي مفعل");
                       setShowSettings(false);
                     }}
-                    className={`px-3 py-1 rounded-xl text-xs font-black ${useProxy ? "bg-[#00C2FF] text-slate-950" : "bg-white/10 text-white"}`}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-black ${useProxy ? "bg-[#00C2FF] text-slate-950" : "bg-white/10 text-white"}`}
                   >
-                    {useProxy ? "مفعّل 🔒" : "معطّل ⚡"}
+                    {useProxy ? "مفعّل" : "معطّل"}
                   </button>
                 </div>
-                <p>استخدم البروكسي لتجاوز الحجب وتحسين الاستقرار</p>
+                <p>استخدم البروكسي لتجاوز الحجب</p>
               </div>
             )}
           </div>
