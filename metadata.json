@@ -1,12 +1,6 @@
 {
   "name": "Stad TV",
-  "description": "منصة بث رياضي وترفيهي عربية فاخرة - مباريات مبشرة، قنوات OTT، أفلام ومسلسلات مع تجربة مستخدم متكاملة.",
-  "requestFramePermissions": [
-    "camera",
-    "microphone",
-    "geolocation"
-  ],
-  "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
+  "description": "A premium sports and IPTV live streaming platform with dynamic match centers and a full admin management dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

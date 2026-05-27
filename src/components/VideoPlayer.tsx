@@ -1,1297 +1,854 @@
-import { useEffect, useRef, useState, useCallback } from "react";
-import Hls from "hls.js";
-import * as dashjs from "dashjs";
+import React, { useEffect, useRef, useState } from 'react';
+import Hls from 'hls.js';
 import { 
-  RotateCw, 
-  RotateCcw, 
-  Play, 
-  Pause, 
-  ArrowLeft, 
-  Cast, 
-  Layers, 
-  Radio, 
-  Settings, 
-  Maximize, 
-  Minimize, 
-  Volume2, 
-  VolumeX,
-  Tv,
-  ExternalLink,
-  Shield,
-  Info,
-  Sparkles,
-  Lock,
-  Unlock,
-  Subtitles,
-  Lightbulb,
-  Wifi,
-  MonitorPlay,
-  Volume1,
-  HelpCircle,
-  Activity,
-  Maximize2
-} from "lucide-react";
+  Play, Pause, Volume2, VolumeX, Maximize2, Minimize2, ArrowLeft, 
+  RotateCcw, Sliders, ShieldCheck, Wifi, Award, Settings2, Subtitles, HelpCircle,
+  Tv as TvIcon, Check, ChevronDown
+} from 'lucide-react';
+import { Language, AdConfig } from '../types';
+import { translations } from '../mockData';
+import AdScriptRenderer from './AdScriptRenderer';
 
 interface VideoPlayerProps {
-  src: string;
-  type?: string;
-  poster?: string;
-  autoplay?: boolean;
-  audioUrl?: string;
+  streamUrl: string;
+  title: string;
+  categoryName?: string;
+  onBack: () => void;
+  isLive?: boolean;
+  servers?: { name: string; url: string }[];
+  epg?: { time: string; titleAr: string; titleEn: string }[];
+  lang: Language;
+  adConfig?: AdConfig;
 }
 
-const toArabicNumerals = (numStr: string): string => {
-  const arabicDigits: { [key: string]: string } = {
-    '0': '٠', '1': '١', '2': '٢', '3': '٣', '4': '٤',
-    '5': '٥', '6': '٦', '7': '٧', '8': '٨', '9': '٩'
-  };
-  return numStr.replace(/[0-9]/g, (w) => arabicDigits[w] || w);
-};
-
-const formatTime = (seconds: number, applyArabic = true): string => {
-  if (isNaN(seconds) || seconds === Infinity) return "٠٠:٠٠";
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  
-  const mStr = m.toString().padStart(2, '0');
-  const sStr = s.toString().padStart(2, '0');
-  
-  let formatted = '';
-  if (h > 0) {
-    formatted = `${h.toString().padStart(2, '0')}:${mStr}:${sStr}`;
-  } else {
-    formatted = `${mStr}:${sStr}`;
-  }
-  
-  return applyArabic ? toArabicNumerals(formatted) : formatted;
-};
-
-const getProxiedUrl = (url: string | undefined): string => {
-  if (!url) return "";
-  let cleanUrl = url.trim();
-  
-  if (cleanUrl.startsWith("ttps://")) {
-    cleanUrl = "https://" + cleanUrl.substring(7);
-  } else if (cleanUrl.startsWith("ttp://")) {
-    cleanUrl = "http://" + cleanUrl.substring(6);
-  }
-
-  if (cleanUrl.startsWith("/api/proxy") || cleanUrl.includes("/api/proxy")) {
-    return cleanUrl;
-  }
-
-  const isExternal = cleanUrl.startsWith("http://") || cleanUrl.startsWith("https://");
-  if (isExternal) {
-    const isM3U8 = cleanUrl.toLowerCase().includes("m3u8");
-    const isTS = cleanUrl.toLowerCase().includes(".ts");
-    const isMP4 = cleanUrl.toLowerCase().includes(".mp4");
-    
-    let path = "/api/proxy";
-    if (isM3U8) {
-      path = "/api/proxy/stream.m3u8";
-    } else if (isTS) {
-      path = "/api/proxy/segment.ts";
-    } else if (isMP4) {
-      path = "/api/proxy/video.mp4";
-    }
-    return `${path}?url=${encodeURIComponent(cleanUrl)}`;
-  }
-  return cleanUrl;
-};
-
-export function VideoPlayer({ src, poster, autoplay = true, audioUrl }: VideoPlayerProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
+export default function VideoPlayer({
+  streamUrl,
+  title,
+  categoryName = 'STAD Live',
+  onBack,
+  isLive = true,
+  servers = [],
+  epg = [],
+  lang,
+  adConfig
+}: VideoPlayerProps) {
+  const t = translations[lang];
   const videoRef = useRef<HTMLVideoElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
-  
+  const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
-  const dashRef = useRef<dashjs.MediaPlayerClass | null>(null);
-  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const lastTapTimeRef = useRef<number>(0);
-  const initCalledRef = useRef<boolean>(false);
+  const networkRetryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const [isPlaying, setIsPlaying] = useState(false);
+  // States
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [volume, setVolume] = useState(0.8);
+  const [isMuted, setIsMuted] = useState(false);
+  const [brightness, setBrightness] = useState(1.0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [activeUrl, setActiveUrl] = useState(streamUrl);
+  const [selectedServerIndex, setSelectedServerIndex] = useState(0);
+  const [quality, setQuality] = useState<'Auto' | '1080p' | '720p' | '480p'>('Auto');
+  const [selectedSubtitle, setSelectedSubtitle] = useState<'Off' | 'Arabic' | 'English'>('Off');
+  const [showConfig, setShowConfig] = useState(false);
+  const [tvRemoteMode, setTvRemoteMode] = useState(false);
+  const [showControls, setShowControls] = useState(true);
+  const [isRotated, setIsRotated] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [buffered, setBuffered] = useState<any[]>([]);
-  const [volume, setVolume] = useState(() => {
-    const saved = localStorage.getItem("stad_tv_volume");
-    return saved ? parseFloat(saved) : 0.8;
-  });
-  const [isMuted, setIsMuted] = useState(false);
-  const [playbackRate, setPlaybackRate] = useState(1);
-  const [aspectRatio, setAspectRatio] = useState<'fit' | 'stretch' | 'zoom' | 'cinema' | 'classic'>('fit');
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isRotated, setIsRotated] = useState(false);
+
+  // Stats
+  const [latency, setLatency] = useState(1.8);
+  const [bitrate, setBitrate] = useState('4.8 Mbps');
   const [isPip, setIsPip] = useState(false);
-  const [isLive, setIsLive] = useState(false);
-  const [isCasting, setIsCasting] = useState(false);
 
-  const [showControls, setShowControls] = useState(true);
-  const [showSettings, setShowSettings] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<"quality" | "audio" | "speed" | "help" | "captions">("quality");
-  const [useProxy, setUseProxy] = useState(true);
-  const [isLocked, setIsLocked] = useState(false);
-  const [brightness, setBrightness] = useState(1.0);
+  // Sync activeUrl state when streamUrl prop changes
+  useEffect(() => {
+    setActiveUrl(streamUrl);
+  }, [streamUrl]);
 
-  const [levels, setLevels] = useState<any[]>([]);
-  const [activeLevel, setActiveLevel] = useState<number>(-1);
-  const [audioTracks, setAudioTracks] = useState<any[]>([]);
-  const [activeAudioTrack, setActiveAudioTrack] = useState<number>(-1);
-  const [captionsTracks, setCaptionsTracks] = useState<any[]>([]);
-  const [activeCaptionsTrack, setActiveCaptionsTrack] = useState<number>(-1);
-
-  const [gestureIndicator, setGestureIndicator] = useState<{
-    type: 'seek' | 'volume' | 'brightness' | null;
-    value: string;
-    percent?: number;
-  }>({ type: null, value: "" });
-
-  const touchStartRef = useRef<{ x: number; y: number; time: number }>({ x: 0, y: 0, time: 0 });
-  const gestureStateRef = useRef<{
-    active: boolean;
-    type: 'seek' | 'volume' | 'brightness' | null;
-    initialVolume: number;
-    initialBrightness: number;
-    initialPlayhead: number;
-  }>({ active: false, type: null, initialVolume: 0, initialBrightness: 1, initialPlayhead: 0 });
-
-  const [retryCount, setRetryCount] = useState(0);
-  const [maxRetries] = useState(5);
-  const [hasError, setHasError] = useState(false);
-  const [errorDetails, setErrorDetails] = useState("");
-  const [isReconnecting, setIsReconnecting] = useState(false);
-  const [toastMessage, setToastMessage] = useState("");
-
-  const triggerToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(""), 3000);
-  };
-
-  const resolvedSrc = useProxy ? getProxiedUrl(src) : src;
-
-  const handleSubtitleTracksUpdate = useCallback(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    const tracks = Array.from(video.textTracks);
-    setCaptionsTracks(tracks);
-    const showIdx = tracks.findIndex(t => t.mode === 'showing');
-    setActiveCaptionsTrack(showIdx);
-  }, []);
-
-  const handleAudioSync = useCallback(() => {
-    if (!audioRef.current || !videoRef.current) return;
-    const vTime = videoRef.current.currentTime;
-    const aTime = audioRef.current.currentTime;
-    if (Math.abs(vTime - aTime) > 0.45) {
-      audioRef.current.currentTime = vTime;
-    }
-  }, []);
-
-  const handleFatalFailover = useCallback((reason: string) => {
-    if (retryCount < maxRetries) {
-      setIsReconnecting(true);
-      const nextRetry = retryCount + 1;
-      setRetryCount(nextRetry);
-      triggerToast(`اتصال متذبذب. يتم فحص جودة السيرفر... (${nextRetry}/${maxRetries})`);
-      setTimeout(() => {
-        initPlayer();
-      }, Math.min(2000 * retryCount, 10000));
-    } else {
-      setHasError(true);
-      setErrorDetails(reason);
-      setIsReconnecting(false);
-    }
-  }, [retryCount, maxRetries]);
-
-  const initPlayer = useCallback(() => {
+  // Load and play live stream
+  useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    setHasError(false);
-    setErrorDetails("");
-    setIsReconnecting(false);
+    setIsLoading(true);
+    setErrorMessage(null);
 
+    // Reset current element first
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
     }
-    if (dashRef.current) {
-      dashRef.current.reset();
-      dashRef.current = null;
+    if (networkRetryTimeoutRef.current) {
+      clearTimeout(networkRetryTimeoutRef.current);
+      networkRetryTimeoutRef.current = null;
     }
 
-    video.removeEventListener('addtrack', handleSubtitleTracksUpdate);
-    video.removeEventListener('removetrack', handleSubtitleTracksUpdate);
-    video.removeEventListener('loadedmetadata', handleSubtitleTracksUpdate);
-
-    const cleanSrc = resolvedSrc.toLowerCase();
-    const isHlsUrl = cleanSrc.includes(".m3u8") || cleanSrc.includes("m3u8");
-    const isDashUrl = cleanSrc.includes(".mpd") || cleanSrc.includes("mpd");
-
-    if (isHlsUrl && Hls.isSupported()) {
+    // Try playing HLS stream using hls.js
+    if (Hls.isSupported() && activeUrl.includes('.m3u8')) {
       const hls = new Hls({
-        maxMaxBufferLength: 30,
         enableWorker: true,
         lowLatencyMode: true,
-        backBufferLength: 45,
-        capLevelToPlayerSize: true
+        backBufferLength: 30
       });
-
       hlsRef.current = hls;
-      hls.loadSource(resolvedSrc);
+
+      hls.loadSource(activeUrl);
       hls.attachMedia(video);
 
-      hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
-        setLevels(data.levels || []);
-        if (autoplay) {
-          video.play().catch(() => {});
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        setIsLoading(false);
+        if (isPlaying) {
+          video.play().catch((err) => {
+            console.log('Autoplay blocked:', err);
+            setIsPlaying(false);
+          });
         }
       });
 
-      hls.on(Hls.Events.LEVEL_SWITCHED, (_, data) => {
-        setActiveLevel(data.level);
-      });
-
-      hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, (_, data) => {
-        setAudioTracks(data.audioTracks || []);
-      });
-
-      hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, (_, data) => {
-        setActiveAudioTrack(data.id);
-      });
-
-      hls.on(Hls.Events.ERROR, (_, data) => {
+      hls.on(Hls.Events.ERROR, (event, data) => {
+        console.error('HLS.js Error:', data);
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              setIsReconnecting(true);
-              hls.startLoad();
+              // Try to recover with limit/delay to prevent infinite rapid loops
+              console.log('Fatal network error, attempting recovery...');
+              const retryCount = (hls as any)._networkRetryCount || 0;
+              if (retryCount < 5) {
+                (hls as any)._networkRetryCount = retryCount + 1;
+                if (networkRetryTimeoutRef.current) clearTimeout(networkRetryTimeoutRef.current);
+                networkRetryTimeoutRef.current = setTimeout(() => {
+                  if (hlsRef.current && hlsRef.current === hls) {
+                    try {
+                      hlsRef.current.startLoad();
+                    } catch (e) {
+                      console.error('Error in startLoad recovery:', e);
+                    }
+                  }
+                }, 2000); // Wait 2 seconds before retrying
+              } else {
+                setErrorMessage('STREAM_NETWORK_DISCONNECTED');
+                setIsLoading(false);
+              }
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
-              setIsReconnecting(true);
-              hls.recoverMediaError();
+              const mediaRetry = (hls as any)._mediaRetryCount || 0;
+              if (mediaRetry < 5) {
+                (hls as any)._mediaRetryCount = mediaRetry + 1;
+                try {
+                  hls.recoverMediaError();
+                } catch (e) {
+                  setErrorMessage('STREAM_MEDIA_RECOVERY_FAILED');
+                  setIsLoading(false);
+                }
+              } else {
+                setErrorMessage('STREAM_MEDIA_DECODING_ERROR');
+                setIsLoading(false);
+              }
               break;
             default:
-              handleFatalFailover(data.details || "لقطات مشفرة أو ثغرة في جدار فك ترميز ميديا HLS");
+              setErrorMessage('STREAM_DECODING_ERROR - ' + data.details);
+              setIsLoading(false);
               break;
           }
         }
       });
-
-    } else if (isDashUrl) {
-      const player = dashjs.MediaPlayer().create();
-      player.initialize(video, resolvedSrc, autoplay);
-      dashRef.current = player;
-      
-      player.on(dashjs.MediaPlayer.events.PLAYBACK_METADATA_LOADED, () => {
-        const hQuality = (player as any).getBitrateInfoListFor("video") || [];
-        setLevels(hQuality);
-      });
-
-      player.on(dashjs.MediaPlayer.events.ERROR, (e: any) => {
-        console.error("DASH loading error captured:", e);
-        handleFatalFailover("تجاوز حظر فك الترميز التلقائي لملفات DASH");
-      });
-
-    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = resolvedSrc;
-      video.addEventListener("loadedmetadata", () => {
-        if (autoplay) video.play().catch(() => {});
-      });
     } else {
-      video.src = resolvedSrc;
+      // Direct media playback or fallback
+      video.src = activeUrl;
+      video.load();
+      
+      const handleCanPlay = () => {
+        setIsLoading(false);
+        if (isPlaying) {
+          video.play().catch(() => setIsPlaying(false));
+        }
+      };
+
+      const handleError = () => {
+        setErrorMessage('SOURCE_PIPELINE_UNAVAILABLE');
+        setIsLoading(false);
+      };
+
+      video.addEventListener('canplay', handleCanPlay);
+      video.addEventListener('error', handleError);
+
+      return () => {
+        video.removeEventListener('canplay', handleCanPlay);
+        video.removeEventListener('error', handleError);
+      };
     }
 
-    video.muted = isMuted;
-    video.volume = volume;
-    video.playbackRate = playbackRate;
-
-    video.addEventListener("loadedmetadata", handleSubtitleTracksUpdate);
-    video.addEventListener("addtrack", handleSubtitleTracksUpdate);
-    video.addEventListener("removetrack", handleSubtitleTracksUpdate);
-    
-    handleSubtitleTracksUpdate();
-  }, [resolvedSrc, autoplay, handleFatalFailover, handleSubtitleTracksUpdate]);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (video) {
-      video.muted = isMuted;
-      video.volume = volume;
-    }
-    if (audioRef.current) {
-      audioRef.current.muted = isMuted;
-      audioRef.current.volume = volume;
-    }
-  }, [volume, isMuted]);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (video) {
-      video.playbackRate = playbackRate;
-    }
-    if (audioRef.current) {
-      audioRef.current.playbackRate = playbackRate;
-    }
-  }, [playbackRate]);
-
-  useEffect(() => {
-    initPlayer();
-    setRetryCount(0);
     return () => {
+      if (networkRetryTimeoutRef.current) {
+        clearTimeout(networkRetryTimeoutRef.current);
+        networkRetryTimeoutRef.current = null;
+      }
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
-      if (dashRef.current) {
-        dashRef.current.reset();
-        dashRef.current = null;
-      }
-      const video = videoRef.current;
-      if (video) {
-        video.removeEventListener('addtrack', handleSubtitleTracksUpdate);
-        video.removeEventListener('removetrack', handleSubtitleTracksUpdate);
-        video.removeEventListener('loadedmetadata', handleSubtitleTracksUpdate);
-      }
     };
-  }, [src, useProxy]);
+  }, [activeUrl]);
 
+  // Handle controls visibility timer
   useEffect(() => {
-    if (!audioUrl || !isPlaying) return;
-    let syncInterval: NodeJS.Timeout | null = null;
-    const startSync = () => {
-      if (syncInterval) clearInterval(syncInterval);
-      syncInterval = setInterval(() => {
-        const video = videoRef.current;
-        const audio = audioRef.current;
-        if (!video || !audio) return;
-        
-        if (audio.readyState < 2) return;
-        
-        if (video.paused && !audio.paused) {
-          audio.pause();
-        } else if (!video.paused && audio.paused && !video.seeking) {
-          audio.play().catch((err) => console.warn("Audio play failed:", err));
-        }
-        
-        const drift = Math.abs(video.currentTime - audio.currentTime);
-        if (drift > 0.15 && !video.seeking && audio.readyState >= 2) {
-          audio.currentTime = video.currentTime;
-        }
-      }, 250);
-    };
-    
-    const timer = setTimeout(startSync, 100);
-    return () => {
+    let timer: NodeJS.Timeout;
+    const handleMouseMove = () => {
+      setShowControls(true);
       clearTimeout(timer);
-      if (syncInterval) clearInterval(syncInterval);
+      timer = setTimeout(() => {
+        if (!showConfig && !tvRemoteMode) {
+          setShowControls(false);
+        }
+      }, isPlaying ? 2500 : 5000); // Hide controls faster (2.5 seconds) if playing
     };
-  }, [isPlaying, audioUrl]);
 
-  useEffect(() => {
-    const video = videoRef.current;
-    const audio = audioRef.current;
-    if (!video) return;
-    
-    if (isPlaying) {
-      if (audio && audioUrl) {
-        if (Math.abs(audio.currentTime - video.currentTime) > 0.5) {
-          audio.currentTime = video.currentTime;
-        }
-        audio.play().catch((err) => console.warn("Audio play error:", err));
-      }
-    } else {
-      if (audio && audioUrl) audio.pause();
-    }
-  }, [isPlaying, audioUrl]);
-
-  const handleTimeUpdate = () => {
-    const video = videoRef.current;
-    if (!video) return;
-    setCurrentTime(video.currentTime);
-    setDuration(video.duration || 0);
-    setIsLive(video.duration === Infinity || video.duration === 0);
-
-    const len = video.buffered.length;
-    let changed = false;
-    if (len !== buffered.length) changed = true;
-    else {
-      for (let i = 0; i < len; i++) {
-        if (video.buffered.start(i) !== buffered[i]?.start || video.buffered.end(i) !== buffered[i]?.end) {
-          changed = true;
-          break;
-        }
-      }
-    }
-    if (changed) {
-      const ranges: any[] = [];
-      for (let i = 0; i < len; i++) {
-        ranges.push({
-          start: video.buffered.start(i),
-          end: video.buffered.end(i)
-        });
-      }
-      setBuffered(ranges);
+    const container = containerRef.current;
+    if (container) {
+      container.addEventListener('mousemove', handleMouseMove);
     }
 
-    if (audioUrl && audioRef.current) {
-      handleAudioSync();
-    }
-  };
-
-  const handlePlayStateChange = () => {
-    const video = videoRef.current;
-    if (!video) return;
-    setIsPlaying(!video.paused);
-  };
-
-  const syncDocumentFullscreen = () => {
-    setIsFullscreen(!!document.fullscreenElement);
-  };
-
-  useEffect(() => {
-    document.addEventListener("fullscreenchange", syncDocumentFullscreen);
-    return () => document.removeEventListener("fullscreenchange", syncDocumentFullscreen);
-  }, []);
-
-  const wakeControls = () => {
-    setShowControls(true);
-    if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
-    if (isPlaying && !showSettings && !isLocked) {
-      controlsTimeoutRef.current = setTimeout(() => {
-        setShowControls(false);
-      }, 2000);
-    }
-  };
-
-  useEffect(() => {
-    wakeControls();
     return () => {
-      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+      if (container) {
+        container.removeEventListener('mousemove', handleMouseMove);
+      }
+      clearTimeout(timer);
     };
-  }, [isPlaying, showSettings, isLocked]);
+  }, [showConfig, tvRemoteMode, isPlaying]);
+
+  // Promptly hide controls after starting play
+  useEffect(() => {
+    if (isPlaying && !showConfig && !tvRemoteMode) {
+      const timer = setTimeout(() => {
+        setShowControls(false);
+      }, 1500); // Hide everything quickly after starting playback (1.5 seconds)
+      return () => clearTimeout(timer);
+    }
+  }, [isPlaying, showConfig, tvRemoteMode]);
+
+  // Setup simulated parameters
+  useEffect(() => {
+    const handleInterval = setInterval(() => {
+      if (isPlaying) {
+        // Mock slight variations to look live
+        setLatency(prev => Math.max(1.2, Math.min(2.4, Number((prev + (Math.random() - 0.5) * 0.2).toFixed(2)))));
+        setBitrate(quality === 'Auto' ? '4.8 Mbps' : quality === '1080p' ? '6.2 Mbps' : quality === '720p' ? '3.5 Mbps' : '1.8 Mbps');
+      }
+    }, 4000);
+    return () => clearInterval(handleInterval);
+  }, [isPlaying, quality]);
+
+  // Video progress triggers
+  const handleTimeUpdate = () => {
+    if (videoRef.current) {
+      setCurrentTime(videoRef.current.currentTime);
+      setDuration(videoRef.current.duration || 0);
+    }
+  };
+
+  // Keyboard support for Android TV simulate
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!tvRemoteMode) return;
+      
+      e.preventDefault();
+      switch (e.key) {
+        case 'ArrowUp':
+          handleVolumeAdjustment(0.1);
+          break;
+        case 'ArrowDown':
+          handleVolumeAdjustment(-0.1);
+          break;
+        case 'ArrowLeft':
+          if (videoRef.current) videoRef.current.currentTime -= 10;
+          break;
+        case 'ArrowRight':
+          if (videoRef.current) videoRef.current.currentTime += 10;
+          break;
+        case ' ': // spacebar as center button
+        case 'Enter':
+          togglePlay();
+          break;
+        case 'Escape':
+          onBack();
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [tvRemoteMode]);
 
   const togglePlay = () => {
     const video = videoRef.current;
     if (!video) return;
+
     if (isPlaying) {
       video.pause();
+      setIsPlaying(false);
     } else {
       video.play().catch(() => {});
-    }
-    wakeControls();
-  };
-
-  const seekForward = (secs = 10) => {
-    const video = videoRef.current;
-    if (!video) return;
-    video.currentTime = Math.min(duration, video.currentTime + secs);
-    wakeControls();
-    triggerToast(`تقديم +${toArabicNumerals(secs.toString())} ثانية`);
-  };
-
-  const seekBackward = (secs = 10) => {
-    const video = videoRef.current;
-    if (!video) return;
-    video.currentTime = Math.max(0, video.currentTime - secs);
-    wakeControls();
-    triggerToast(`تراجع -${toArabicNumerals(secs.toString())} ثانية`);
-  };
-
-  const handleVolumeChange = (val: number) => {
-    const video = videoRef.current;
-    if (!video) return;
-    const cleanVol = Math.max(0, Math.min(1, val));
-    setVolume(cleanVol);
-    localStorage.setItem("stad_tv_volume", cleanVol.toString());
-    video.volume = cleanVol;
-    if (cleanVol > 0) {
-      setIsMuted(false);
-      video.muted = false;
-    } else {
-      setIsMuted(true);
-      video.muted = true;
-    }
-    if (audioRef.current) {
-      audioRef.current.volume = cleanVol;
-      audioRef.current.muted = cleanVol === 0;
+      setIsPlaying(true);
     }
   };
 
-  const toggleMuted = () => {
-    const nextMute = !isMuted;
-    setIsMuted(nextMute);
-    const video = videoRef.current;
-    if (video) {
-      video.muted = nextMute;
-      video.volume = volume;
-    }
-    if (audioRef.current) {
-      audioRef.current.muted = nextMute;
-      audioRef.current.volume = volume;
-    }
-    triggerToast(nextMute ? "كتم الصوت 🔇" : "تشغيل الصوت 🔊");
-  };
-
-  const chooseQuality = (levelId: number) => {
-    if (hlsRef.current) {
-      hlsRef.current.currentLevel = levelId;
-      setActiveLevel(levelId);
-      triggerToast(levelId === -1 ? "تفعيل الدقة التلقائية Auto" : `تغيير الجودة إلى ${levels[levelId]?.height}p`);
-    } else if (dashRef.current) {
-      if (levelId === -1) {
-        dashRef.current.updateSettings({
-          streaming: {
-            abr: { autoSwitchBitrate: { video: true } }
-          }
-        });
-        setActiveLevel(-1);
-        triggerToast("تفعيل الدقة التلقائية Auto");
-      } else {
-        dashRef.current.updateSettings({
-          streaming: {
-            abr: { autoSwitchBitrate: { video: false } }
-          }
-        });
-        if (dashRef.current.setQualityFor) {
-          dashRef.current.setQualityFor("video", levelId, true);
-        } else if ((dashRef.current as any).setQualityFor) {
-          (dashRef.current as any).setQualityFor("video", levelId, true);
-        }
-        setActiveLevel(levelId);
-        triggerToast(`تغيير الجودة إلى ${levels[levelId]?.height}p`);
+  const handleVolumeAdjustment = (delta: number) => {
+    setVolume(prev => {
+      const next = Math.max(0, Math.min(1, prev + delta));
+      if (videoRef.current) {
+        videoRef.current.volume = next;
+        videoRef.current.muted = next === 0;
       }
-    } else {
-      triggerToast("سيرفر يدوي غير مدعوم في المشغل الافتراضي لجهازك");
-    }
-    setShowSettings(false);
-  };
-
-  const chooseAudioTrack = (trackId: number) => {
-    if (hlsRef.current) {
-      hlsRef.current.audioTrack = trackId;
-      setActiveAudioTrack(trackId);
-    }
-    setShowSettings(false);
-  };
-
-  const chooseCaptionsTrack = (trackId: number) => {
-    const video = videoRef.current;
-    if (!video) return;
-    const tracksArray = Array.from(video.textTracks);
-    tracksArray.forEach((track, idx) => {
-      track.mode = idx === trackId ? 'showing' : 'disabled';
+      setIsMuted(next === 0);
+      return next;
     });
-    setActiveCaptionsTrack(trackId);
-    triggerToast(trackId === -1 ? "تم إغلاق الترجمة الفورية" : `الترجمة: ${tracksArray[trackId]?.label || tracksArray[trackId]?.language || trackId}`);
-    setShowSettings(false);
   };
 
-  const chooseSpeed = (rate: number) => {
-    const video = videoRef.current;
-    if (video) {
-      video.playbackRate = rate;
-      setPlaybackRate(rate);
-      triggerToast(`سرعة التشغيل: ${toArabicNumerals(rate.toString())}x`);
+  const toggleMute = () => {
+    if (videoRef.current) {
+      const nextMute = !isMuted;
+      videoRef.current.muted = nextMute;
+      setIsMuted(nextMute);
     }
-    setShowSettings(false);
   };
 
   const toggleFullscreen = () => {
-    if (!containerRef.current) return;
+    const container = containerRef.current;
+    if (!container) return;
+
     if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen()
-        .then(() => setIsFullscreen(true))
-        .catch(() => triggerToast("ملء الشاشة غير مدعوم في متصفحك الحالي"));
+      container.requestFullscreen().then(() => {
+        setIsFullscreen(true);
+      }).catch(err => {
+        console.error('Fullscreen request rejected', err);
+      });
     } else {
-      document.exitFullscreen()
-        .then(() => setIsFullscreen(false));
+      document.exitFullscreen().then(() => {
+        setIsFullscreen(false);
+      });
     }
   };
 
-  const togglePiP = async () => {
-    const video = videoRef.current;
-    if (!video || !document.pictureInPictureEnabled) {
-      triggerToast("وضعية صورة داخل صورة غير مدعومة حالياً");
-      return;
-    }
+  // Sync state with filesystem fullscreen changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const handleReconnect = () => {
+    setIsLoading(true);
+    const temp = activeUrl;
+    setActiveUrl('');
+    setTimeout(() => {
+      setActiveUrl(temp);
+      setErrorMessage(null);
+    }, 1200);
+  };
+
+  const changeServer = (index: number, url: string) => {
+    setSelectedServerIndex(index);
+    setActiveUrl(url);
+    setIsLoading(true);
+  };
+
+  // Picture in Picture simulation/native
+  const togglePip = async () => {
     try {
       if (document.pictureInPictureElement) {
         await document.exitPictureInPicture();
         setIsPip(false);
-      } else {
-        await video.requestPictureInPicture();
+      } else if (videoRef.current) {
+        await videoRef.current.requestPictureInPicture();
         setIsPip(true);
       }
     } catch (e) {
-      console.error(e);
+      console.warn('PIP not supported natively in this browser environment', e);
+      // Fallback toggler
+      setIsPip(!isPip);
     }
   };
 
-  const handleChromecastMockAction = () => {
-    if (isCasting) {
-      setIsCasting(false);
-      triggerToast("تم فصل الاتصال بالتلفاز الذكي 📺");
-    } else {
-      setIsCasting(true);
-      triggerToast("جاري البحث عن أجهزة Chromecast / Smart TV القريبة...");
-      setTimeout(() => {
-        triggerToast("متصل الآن بالتلفاز الذكي! يتم بث شاشة العرض بسلاسة.");
-      }, 2500);
-    }
+  // Time format
+  const formatTime = (timeInSeconds: number) => {
+    const minutes = Math.floor(timeInSeconds / 60);
+    const seconds = Math.floor(timeInSeconds % 60);
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (isLocked) return;
-    const touch = e.touches[0];
-    const video = videoRef.current;
-    touchStartRef.current = {
-      x: touch.clientX,
-      y: touch.clientY,
-      time: Date.now()
-    };
-    gestureStateRef.current = {
-      active: true,
-      type: null,
-      initialVolume: video ? video.volume : volume,
-      initialBrightness: brightness,
-      initialPlayhead: video ? video.currentTime : currentTime
-    };
-    wakeControls();
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!gestureStateRef.current.active || isLocked) return;
-    const touch = e.touches[0];
-    const deltaX = touch.clientX - touchStartRef.current.x;
-    const deltaY = touchStartRef.current.y - touch.clientY;
-    const container = containerRef.current;
-    if (!container) return;
-
-    const width = container.clientWidth;
-    const height = container.clientHeight;
-
-    if (!gestureStateRef.current.type) {
-      if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 15) {
-        gestureStateRef.current.type = 'seek';
-      } else if (Math.abs(deltaY) > 15) {
-        const rect = container.getBoundingClientRect();
-        const startXInPercent = (touchStartRef.current.x - rect.left) / width;
-        if (startXInPercent < 0.5) {
-          gestureStateRef.current.type = 'brightness';
-        } else {
-          gestureStateRef.current.type = 'volume';
-        }
-      }
-    }
-
-    const video = videoRef.current;
-    const gType = gestureStateRef.current.type;
-
-    if (gType === 'seek' && video && duration) {
-      const seekRatio = deltaX / width;
-      const secondsToSeek = seekRatio * 180;
-      const targetTime = Math.max(0, Math.min(duration, gestureStateRef.current.initialPlayhead + secondsToSeek));
-      
-      setGestureIndicator({
-        type: 'seek',
-        value: `${formatTime(targetTime)} / ${formatTime(duration)}`,
-        percent: (targetTime / duration) * 100
-      });
-      video.currentTime = targetTime;
-    } else if (gType === 'volume' && video) {
-      const volumeRatio = deltaY / (height * 0.7);
-      const targetVolume = Math.max(0, Math.min(1, gestureStateRef.current.initialVolume + volumeRatio));
-      handleVolumeChange(targetVolume);
-      setGestureIndicator({
-        type: 'volume',
-        value: `%${Math.round(targetVolume * 100)}`,
-        percent: targetVolume * 100
-      });
-    } else if (gType === 'brightness') {
-      const brightnessRatio = deltaY / (height * 0.7);
-      const targetBrightness = Math.max(0.1, Math.min(1.0, gestureStateRef.current.initialBrightness + brightnessRatio));
-      setBrightness(targetBrightness);
-      setGestureIndicator({
-        type: 'brightness',
-        value: `%${Math.round(targetBrightness * 100)}`,
-        percent: targetBrightness * 100
-      });
-    }
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    gestureStateRef.current.active = false;
-    setGestureIndicator({ type: null, value: "" });
-
-    const touch = e.changedTouches[0];
-    const durationSinceStart = Date.now() - touchStartRef.current.time;
-    const deltaX = Math.abs(touch.clientX - touchStartRef.current.x);
-    const deltaY = Math.abs(touch.clientY - touchStartRef.current.y);
-
-    if (durationSinceStart < 250 && deltaX < 8 && deltaY < 8) {
-      const now = Date.now();
-      const lastTap = lastTapTimeRef.current;
-      const rect = containerRef.current?.getBoundingClientRect();
-
-      if (now - lastTap < 300 && rect) {
-        const tapX = touch.clientX;
-        const tapPercent = (tapX - rect.left) / rect.width;
-        if (tapPercent > 0.6) {
-          seekForward(10);
-        } else if (tapPercent < 0.4) {
-          seekBackward(10);
-        } else {
-          togglePlay();
-        }
-        lastTapTimeRef.current = 0;
-      } else {
-        lastTapTimeRef.current = now;
-        togglePlay();
-      }
-    }
-  };
-
-  const handleTVKeyboard = useCallback((e: KeyboardEvent) => {
-    if (!showControls) {
-      wakeControls();
-      e.preventDefault();
-      return;
-    }
-
-    switch (e.key) {
-      case "ArrowLeft":
-        seekBackward(10);
-        e.preventDefault();
-        break;
-      case "ArrowRight":
-        seekForward(10);
-        e.preventDefault();
-        break;
-      case "ArrowUp":
-        handleVolumeChange(volume + 0.1);
-        e.preventDefault();
-        break;
-      case "ArrowDown":
-        handleVolumeChange(volume - 0.1);
-        e.preventDefault();
-        break;
-      case "Enter":
-      case " ":
-        togglePlay();
-        e.preventDefault();
-        break;
-      case "Escape":
-      case "Backspace":
-        if (showSettings) {
-          setShowSettings(false);
-          e.preventDefault();
-        } else if (isFullscreen) {
-          toggleFullscreen();
-          e.preventDefault();
-        }
-        break;
-    }
-  }, [showControls, showSettings, volume, isFullscreen, duration]);
-
-  useEffect(() => {
-    window.addEventListener("keydown", handleTVKeyboard);
-    return () => window.removeEventListener("keydown", handleTVKeyboard);
-  }, [handleTVKeyboard]);
-
-  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
-
-  const getAspectRatioClasses = () => {
-    switch (aspectRatio) {
-      case "zoom":
-        return "object-cover scale-105";
-      case "stretch":
-        return "object-fill h-full w-full";
-      case "cinema":
-        return "object-contain aspect-[21/9]";
-      case "classic":
-        return "object-contain aspect-[4/3]";
-      case "fit":
-      default:
-        return "object-contain";
-    }
-  };
+  const isRtl = lang === 'ar';
 
   return (
-    <div 
-      ref={containerRef}
-      onMouseMove={wakeControls}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      className={`relative w-full aspect-video md:aspect-[16/9] bg-[#07111F] rounded-[2rem] overflow-hidden select-none border border-white/5 transition-all duration-300 shadow-[0_25px_60px_-15px_rgba(7,17,31,0.9)] transform-gpu ${
-        isFullscreen ? "rounded-none h-screen w-screen z-[999] inset-0 fixed" : ""
-      }`}
-      style={{ 
-        direction: "rtl",
-        ...(isRotated ? {
-          position: 'fixed',
-          top: '50%',
-          left: '50%',
-          width: '100vh',
-          height: '100vw',
-          transform: 'translate(-50%, -50%) rotate(90deg)',
-          zIndex: 9999,
-          borderRadius: '0px'
-        } : {})
-      }}
-    >
-      <div 
-        className="absolute inset-0 z-10 pointer-events-none bg-black transition-opacity duration-200" 
-        style={{ opacity: 1 - brightness }} 
-      />
+    <div className="w-full flex flex-col gap-6" id="player-view-container">
+      {/* Back button and quick headers */}
+      <div className="flex items-center justify-between pb-3 border-b border-white/[0.04]">
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={onBack}
+            className="w-10 h-10 rounded-xl bg-brand-card border border-white/5 flex items-center justify-center text-brand-muted hover:text-white hover:bg-white/5 transition duration-300"
+          >
+            <ArrowLeft size={16} />
+          </button>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xs sm:text-sm md:text-base font-black text-white flex flex-wrap items-center gap-1.5 leading-tight">
+              <span className="text-brand-accent font-mono tracking-wider uppercase text-[9.5px] md:text-[11px] bg-brand-accent/10 px-2 py-0.5 md:px-2.5 md:py-1 rounded border border-brand-accent/20 shrink-0">البث المباشر لستاد TV</span>
+              <span className="text-zinc-600 hidden sm:inline">-</span>
+              <span className="text-white text-xs sm:text-sm md:text-base">{title}</span>
+            </h1>
+            <p className="text-[10px] md:text-[11px] text-brand-muted font-bold mt-1">🛰️ {categoryName}</p>
+          </div>
+        </div>
 
-      <div className="absolute bottom-[80px] left-1/2 -translate-x-1/2 z-20 pointer-events-none text-center" />
-
-      <div className="w-full h-full relative" onClick={togglePlay}>
-        {audioUrl && (
-          <audio 
-            ref={audioRef} 
-            src={getProxiedUrl(audioUrl)} 
-            preload="auto"
-            muted={isMuted}
-            style={{ display: "none" }}
-          />
-        )}
-        <video
-          ref={videoRef}
-          poster={poster}
-          playsInline
-          webkit-playsinline="true"
-          muted={isMuted}
-          onTimeUpdate={handleTimeUpdate}
-          onPlay={handlePlayStateChange}
-          onPause={handlePlayStateChange}
-          onWaiting={() => {
-            if (audioRef.current) audioRef.current.pause();
-          }}
-          onPlaying={() => {
-            const video = videoRef.current;
-            const audio = audioRef.current;
-            if (video && audio) {
-              audio.currentTime = video.currentTime;
-              if (isPlaying) audio.play().catch(() => {});
-            }
-          }}
-          onSeeking={() => {
-            const video = videoRef.current;
-            const audio = audioRef.current;
-            if (video && audio) {
-              audio.currentTime = video.currentTime;
-            }
-          }}
-          onSeeked={() => {
-            const video = videoRef.current;
-            const audio = audioRef.current;
-            if (video && audio) {
-              audio.currentTime = video.currentTime;
-            }
-          }}
-          onRateChange={() => {
-            const video = videoRef.current;
-            const audio = audioRef.current;
-            if (video && audio) {
-              audio.playbackRate = video.playbackRate;
-            }
-          }}
-          className={`w-full h-full block bg-black shadow-inner transition-all duration-300 ${getAspectRatioClasses()}`}
-          style={{ transform: "translate3d(0, 0, 0)", WebkitBackfaceVisibility: "hidden" }}
-        />
+        {/* Protection / Connectivity Banner */}
+        <div className="hidden lg:flex items-center gap-4 text-xs font-bold">
+          <span className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500/10 text-emerald-400 font-mono border border-emerald-500/15">
+            <Wifi size={12} /> {t.vpnDetected}
+          </span>
+          <span className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-brand-accent/10 text-brand-accent border border-brand-accent/15">
+            <ShieldCheck size={12} /> خط آمن ومثبت HDCP (معدل 10Gbps)
+          </span>
+        </div>
       </div>
 
-      {!isPlaying && !isReconnecting && !hasError && (
-        <button 
-          onClick={togglePlay}
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 w-16 h-16 sm:w-20 sm:h-20 bg-[#0E1B2E]/80 backdrop-blur-xl border border-[#00C2FF]/20 text-[#00C2FF] rounded-full flex items-center justify-center shadow-[0_10px_40px_rgba(0,194,255,0.25)] hover:scale-105 hover:bg-[#0E1B2E] transition-all duration-300 active:scale-95"
-        >
-          <Play className="w-8 h-8 fill-[#00C2FF] translate-x-[-2px] text-[#00C2FF]" />
-        </button>
-      )}
-
-      {toastMessage && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[110] bg-[#0E1B2E]/95 border border-[#00C2FF]/30 text-[#F5F7FA] text-[10px] font-black px-3 py-1.5 rounded-xl shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-3 duration-300">
-          <div className="flex items-center gap-1">
-            <Sparkles className="w-3 h-3 text-[#00C2FF] animate-pulse" />
-            <span>{toastMessage}</span>
-          </div>
-        </div>
-      )}
-
-      {(isReconnecting || (!isPlaying && videoRef.current?.seeking)) && (
-        <div className="absolute inset-0 z-50 bg-[#07111F]/90 backdrop-blur-md flex flex-col items-center justify-center p-4 text-center">
-          <div className="relative w-12 h-12 mb-2">
-            <span className="absolute inset-0 rounded-full border-3 border-[#0E1B2E] opacity-50" />
-            <span className="absolute inset-0 rounded-full border-3 border-t-[#00C2FF] border-r-[#7C4DFF] animate-spin" />
-            <Activity className="absolute inset-0 m-auto w-5 h-5 text-[#00C2FF] animate-pulse" />
-          </div>
-          <h3 className="text-[11px] font-black text-[#F5F7FA]">جاري تأمين البث...</h3>
-          <p className="text-[9px] text-[#A1A1AA] mt-1 max-w-xs leading-relaxed">
-            يتم فحص النطاق الترددي وموازنة معدل البث.
-          </p>
-        </div>
-      )}
-
-      {hasError && (
-        <div className="absolute inset-0 z-50 bg-[#07111F]/95 backdrop-blur-lg flex flex-col items-center justify-center p-4 text-center">
-          <div className="w-12 h-12 bg-[#0E1B2E] border border-red-500/20 text-[#00C2FF] rounded-full flex items-center justify-center mb-3">
-            <Wifi className="w-6 h-6 text-red-400 animate-pulse" />
-          </div>
-          <h2 className="text-sm font-black text-[#F5F7FA]">انقطع الاتصال بالسيرفر</h2>
-          <p className="text-[10px] text-[#A1A1AA] max-w-md mt-1 leading-relaxed">
-            هناك حمل مكثف على السيرفر. يرجى تفعيل المعايرة التلقائية.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-2 mt-4 w-full max-w-xs">
-            <button 
-              onClick={() => {
-                setUseProxy(!useProxy);
-                initPlayer();
-              }}
-              className="flex-1 bg-[#0E1B2E] hover:bg-[#12223a] text-[#F5F7FA] border border-white/5 font-black text-[10px] py-1.5 rounded-xl transition-all"
-            >
-              {useProxy ? "🔐 تفعيل البروكسي" : "⚡ اتصال مباشر"}
-            </button>
-            <button 
-              onClick={initPlayer}
-              className="flex-1 bg-gradient-to-r from-[#00C2FF] to-[#7C4DFF] hover:brightness-110 text-slate-950 font-black text-[10px] py-1.5 rounded-xl transition-all"
-            >
-              إعادة الاتصال 🔄
-            </button>
-          </div>
-        </div>
-      )}
-
-      {isLocked && showControls && (
-        <div className="absolute inset-0 z-50 bg-[#07111F]/60 backdrop-blur-sm flex items-center justify-center">
-          <button 
-            onClick={() => {
-              setIsLocked(false);
-              triggerToast("تم إلغاء القفل 🔓");
-            }}
-            className="p-3 rounded-full bg-[#0E1B2E] border border-[#00C2FF]/30 text-[#00C2FF] hover:scale-105 active:scale-95 transition-all shadow-2xl"
-          >
-            <Unlock className="w-5 h-5 animate-pulse" />
-          </button>
-        </div>
-      )}
-
-      {gestureIndicator.type && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-[#0E1B2E]/90 border border-[#00C2FF]/30 px-4 py-3 rounded-2xl flex flex-col items-center gap-1.5 shadow-[0_0_25px_rgba(0,194,255,0.25)] backdrop-blur-md">
-          {gestureIndicator.type === 'seek' && <Sparkles className="w-5 h-5 text-[#00C2FF] animate-bounce" />}
-          {gestureIndicator.type === 'volume' && <Volume2 className="w-5 h-5 text-[#00C2FF]" />}
-          {gestureIndicator.type === 'brightness' && <Lightbulb className="w-5 h-5 text-[#7C4DFF]" />}
-          <span className="text-[11px] font-black text-white leading-none">{gestureIndicator.value}</span>
-          {gestureIndicator.percent !== undefined && (
-            <div className="w-20 h-1 bg-black/40 rounded-full mt-0.5 overflow-hidden">
-              <div className="h-full bg-[#00C2FF]" style={{ width: `${gestureIndicator.percent}%` }} />
-            </div>
-          )}
-        </div>
-      )}
-
-      {isCasting && (
-        <div className="absolute bottom-24 right-5 z-20 bg-[#00C2FF]/10 border border-[#00C2FF]/30 px-3 py-1.5 rounded-xl flex items-center gap-1.5 text-[10px] font-black text-[#00C2FF] backdrop-blur-md animate-pulse">
-          <Cast className="w-3.5 h-3.5" />
-          <span>يبث الآن للتلفزيون الذكي</span>
-        </div>
-      )}
-
-      <div 
-        className={`absolute inset-0 z-40 flex flex-col justify-between p-4 sm:p-5.5 bg-gradient-to-t from-black/85 via-black/10 to-black/75 transition-all duration-400 font-sans ${
-          showControls && !isLocked ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3 pointer-events-none"
-        }`}
-      >
-        <div className="flex items-center justify-between">
-          <button 
-            onClick={() => window.history.back()} 
-            className="w-9 h-9 sm:w-11 sm:h-11 rounded-1.5xl bg-[#0E1B2E]/60 backdrop-blur-md hover:bg-[#0E1B2E] text-[#F5F7FA] border border-white/10 flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-[#00C2FF]"
-          >
-            <ArrowLeft className="w-4 h-4 sm:w-5 h-5 translate-x-[1px]" />
-          </button>
-
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#00C2FF]/15 border border-[#00C2FF]/25 rounded-xl text-[9px] sm:text-[10px] font-black text-[#00C2FF] uppercase select-none shadow-sm">
-              <Activity className="w-3 h-3 text-[#00C2FF] animate-pulse" />
-              <span>معاير فائق السرعة</span>
-            </div>
-            
-            <button 
-              onClick={() => {
-                setIsLocked(true);
-                triggerToast("تم تأمين المشغل 🔒");
-              }}
-              className="w-9 h-9 sm:w-11 sm:h-11 rounded-1.5xl bg-[#0E1B2E]/60 backdrop-blur-md hover:bg-red-950/20 hover:text-red-400 text-[#F5F7FA] border border-white/10 flex items-center justify-center transition-all"
-            >
-              <Lock className="w-4 h-4 sm:w-5 h-5" />
-            </button>
-          </div>
-        </div>
-
-        <div className="flex flex-col items-center gap-1.5 w-full mt-2 pointer-events-none select-none">
-          {isMuted ? (
-            <button
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                toggleMuted();
-              }}
-              className="pointer-events-auto flex items-center gap-2 px-2.5 py-1.5 bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-400 rounded-lg text-[9px] sm:text-[10px] font-bold shadow-lg backdrop-blur-md transition-all active:scale-95 animate-pulse"
-              title="اضغط لتشغيل الصوت"
-            >
-              <VolumeX className="w-3 h-3 text-red-400" />
-              <span>الصوت مكتوم • انقر للتشغيل</span>
-            </button>
-          ) : (
-            <div className="flex items-center gap-2 px-2.5 py-1.5 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 rounded-lg text-[9px] sm:text-[10px] font-bold shadow-md backdrop-blur-md">
-              <span className="relative flex h-1.5 w-1.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-              </span>
-              <span>
-                {audioUrl ? "🎙️ صوت خارجي متزامن" : "🔊 صوت نشط"}
-              </span>
-            </div>
-          )}
-        </div>
-
-        <div className="flex justify-center items-center gap-5 my-auto" />
-
-        <div className="flex justify-between items-center max-w-[95%] mx-auto w-full pointer-events-auto gap-3">
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={togglePlay}
-              className="w-11 h-11 rounded-xl bg-[#0E1B2E]/80 backdrop-blur-xl border border-white/10 text-white flex items-center justify-center hover:bg-[#00C2FF] hover:text-slate-950 hover:border-[#00C2FF] active:scale-95 transition-all shadow-lg"
-              title={isPlaying ? "إيقاف مؤقت" : "تشغيل"}
-            >
-              {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current" />}
-            </button>
-
-            <button 
-              onClick={toggleMuted}
-              className={`w-11 h-11 rounded-xl backdrop-blur-xl border flex items-center justify-center active:scale-95 transition-all shadow-lg ${
-                isMuted 
-                  ? "bg-red-950/40 border-red-500/30 text-red-400 hover:bg-red-900/40" 
-                  : "bg-[#0E1B2E]/80 border-white/10 text-emerald-400 hover:bg-[#00C2FF] hover:text-slate-950 hover:border-[#00C2FF]"
-              }`}
-              title={isMuted ? "تشغيل الصوت" : "كتم الصوت"}
-            >
-              {isMuted ? <VolumeX className="w-5 h-5 animate-pulse" /> : <Volume2 className="w-5 h-5" />}
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={() => {
-                setIsRotated(!isRotated);
-                triggerToast(!isRotated ? "وضع أفقي" : "وضع رأسي");
-              }}
-              className={`w-11 h-11 rounded-xl backdrop-blur-xl border flex items-center justify-center active:scale-95 transition-all shadow-lg ${
-                isRotated 
-                  ? "bg-[#00C2FF]/20 border-[#00C2FF]/40 text-[#00C2FF]" 
-                  : "bg-[#0E1B2E]/80 border-white/10 text-white hover:bg-[#00C2FF] hover:text-slate-950 hover:border-[#00C2FF]"
-              }`}
-              title="عرض أفقي (تدوير)"
-            >
-              <RotateCw className={`w-5 h-5 transition-transform ${isRotated ? 'rotate-90' : ''}`} />
-            </button>
-
-            <button 
-              onClick={toggleFullscreen}
-              className="w-11 h-11 rounded-xl bg-[#0E1B2E]/80 backdrop-blur-xl border border-white/10 text-white flex items-center justify-center hover:bg-[#00C2FF] hover:text-slate-950 hover:border-[#00C2FF] active:scale-95 transition-all shadow-lg"
-              title={isFullscreen ? "تصغير الشاشة" : "ملء الشاشة"}
-            >
-              {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
-            </button>
-          </div>
-        </div>
-
-        {showSettings && (
+      {/* Main Player Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Playback Window */}
+        <div className="lg:col-span-3 flex flex-col gap-3">
           <div 
-            className="absolute bottom-[100px] left-6 max-w-sm w-[280px] bg-[#0E1B2E]/98 border border-[#00C2FF]/10 rounded-2xl p-3 shadow-2xl z-50 text-right animate-in fade-in slide-in-from-bottom-3 duration-300 backdrop-blur-2xl"
-            onClick={(e) => e.stopPropagation()}
+            ref={containerRef}
+            className={`relative rounded-3xl overflow-hidden bg-black shadow-[0_10px_40px_-15px_rgba(0,194,255,0.2)] border border-white/[0.04] w-full group transition-all duration-300 ${
+              isFullscreen && !isRotated ? 'h-screen w-screen rounded-none border-none' : 'aspect-video'
+            } ${isPip ? 'fixed bottom-4 right-4 w-80 h-48 z-50 rounded-2xl border-2 border-brand-accent shadow-2xl' : ''}`}
+            style={isRotated ? {
+              position: 'fixed',
+              top: '50%',
+              left: '50%',
+              width: '100vh',
+              height: '100vw',
+              transform: 'translate(-50%, -50%) rotate(90deg)',
+              zIndex: 99999,
+              filter: `brightness(${brightness})`,
+              maxWidth: 'none',
+              maxHeight: 'none',
+              borderRadius: '0px'
+            } : { filter: `brightness(${brightness})` }}
           >
-            <div className="grid grid-cols-5 gap-1 p-1 bg-black/40 rounded-xl border border-white/5 mb-3">
-              {[
-                { id: "quality", label: "الجودة" },
-                { id: "audio", label: "المعلق" },
-                { id: "captions", label: "الترجمة" },
-                { id: "speed", label: "السرعة" },
-                { id: "help", label: "بروكسي" }
-              ].map(item => (
-                <button
-                  key={item.id}
-                  onClick={() => setSettingsTab(item.id as any)}
-                  className={`py-1 rounded-lg text-[9px] font-black transition-all text-center ${
-                    settingsTab === item.id 
-                      ? "bg-[#00C2FF] text-slate-950" 
-                      : "text-gray-400 hover:text-white"
-                  }`}
+            {/* Native Video object */}
+            <video
+              ref={videoRef}
+              className="w-full h-full object-contain"
+              onTimeUpdate={handleTimeUpdate}
+              onClick={togglePlay}
+              playsInline
+            />
+
+            {/* Direct Swipe Control simulation pads on left/right for Mobile user request */}
+            {!isFullscreen && (
+              <div className="absolute inset-x-0 inset-y-12 flex justify-between pointer-events-none">
+                <div className="w-1/5 h-full relative pointer-events-auto flex items-center pl-4 opacity-0 hover:opacity-100 group-hover:opacity-40 transition cursor-ns-resize">
+                  <div className="bg-brand-secondary/90 backdrop-blur py-3 px-2 rounded-2xl text-center text-white text-[10px] space-y-1 border border-white/[0.05]">
+                    <Sliders size={12} className="mx-auto text-brand-accent" />
+                    <span>الإضاءة</span>
+                    <input 
+                      type="range" 
+                      min="0.3" 
+                      max="1.5" 
+                      step="0.05" 
+                      value={brightness} 
+                      onChange={(e) => setBrightness(Number(e.target.value))}
+                      className="w-16 h-1 bg-brand-card rounded outline-none accent-brand-accent"
+                    />
+                  </div>
+                </div>
+
+                <div className="w-1/5 h-full relative pointer-events-auto flex items-center justify-end pr-4 opacity-0 hover:opacity-100 group-hover:opacity-40 transition cursor-ns-resize">
+                  <div className="bg-brand-secondary/90 backdrop-blur py-3 px-2 rounded-2xl text-center text-white text-[10px] space-y-1 border border-white/[0.05]">
+                    <Volume2 size={12} className="mx-auto text-brand-accent" />
+                    <span>الصوت</span>
+                    <input 
+                      type="range" 
+                      min="0" 
+                      max="1" 
+                      step="0.05" 
+                      value={volume} 
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setVolume(val);
+                        if(videoRef.current) videoRef.current.volume = val;
+                      }}
+                      className="w-16 h-1 bg-brand-card rounded outline-none accent-brand-accent"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ERROR DISPLAY */}
+            {errorMessage && (
+              <div className="absolute inset-0 bg-brand-bg/95 flex flex-col items-center justify-center text-center p-6 gap-4 border border-brand-live/35">
+                <div className="w-16 h-16 rounded-full bg-brand-live/10 border border-brand-live flex items-center justify-center text-brand-live">
+                  <RotateCcw size={28} className="animate-spin" />
+                </div>
+                <div>
+                  <h3 className="text-white font-black text-base">⚠️ فترة انتظار اتصال السيرفر تجاوزت الحد المسموح</h3>
+                  <p className="text-xs text-brand-muted mt-1 max-w-md font-mono">{errorMessage}</p>
+                </div>
+                <button 
+                  onClick={handleReconnect}
+                  className="px-6 py-2.5 bg-brand-accent hover:opacity-90 text-brand-bg text-xs font-black rounded-xl transition flex items-center gap-2 shadow-[0_0_15px_rgba(0,194,255,0.3)] glow-accent"
                 >
-                  {item.label}
+                  {t.reconnect}
                 </button>
-              ))}
+              </div>
+            )}
+
+            {/* LOADING BUFFER WHEEL */}
+            {isLoading && !errorMessage && (
+              <div className="absolute inset-0 bg-brand-bg/95 flex flex-col items-center justify-center text-center p-6 gap-3">
+                <div className="w-12 h-12 border-4 border-brand-accent border-t-transparent rounded-full animate-spin shadow-[0_0_15px_rgba(0,194,255,0.1)]" />
+                <p className="text-[10px] text-brand-accent font-semibold tracking-wider uppercase animate-pulse">
+                  جاري الاتصال الآمن بسيرفرات STAD TV للبث الفوري المباشر...
+                </p>
+              </div>
+            )}
+
+            {/* SYSTEM CONTROLS LAYER OVERLAY */}
+            <div 
+              className={`absolute inset-0 bg-gradient-to-t from-black/95 via-black/10 to-transparent flex flex-col justify-between p-4 transition-all duration-300 ${
+                showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
+              }`}
+            >
+              {/* TOP NAV BAR INSIDE PLAYER */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-brand-live animate-pulse" />
+                  <span className="bg-brand-live text-white font-sans font-black text-[10px] px-2.5 py-0.5 rounded tracking-wide glow-live">
+                    {t.liveNow}
+                  </span>
+                  <span className="text-xs text-zinc-200 font-bold truncate max-w-[200px] drop-shadow">
+                    {title}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {/* Android TV Remote toggle */}
+                  <button
+                    onClick={() => setTvRemoteMode(!tvRemoteMode)}
+                    className={`p-2 rounded-xl transition-all ${
+                      tvRemoteMode 
+                        ? 'bg-brand-accent text-brand-bg shadow-[0_0_12px_rgba(0,194,255,0.4)] font-black' 
+                        : 'bg-brand-secondary/80 hover:bg-brand-secondary text-brand-muted hover:text-white border border-white/5'
+                    }`}
+                    title={t.tvRemoteMode}
+                  >
+                    <TvIcon size={14} />
+                  </button>
+
+                  <button
+                    onClick={() => setShowConfig(!showConfig)}
+                    className="p-2 bg-brand-secondary/80 hover:bg-brand-secondary text-white rounded-xl transition border border-white/5"
+                  >
+                    <Settings2 size={14} />
+                  </button>
+                </div>
+              </div>
+
+              {/* TV Remote D-Pad HUD */}
+              {tvRemoteMode && (
+                <div className="self-center bg-brand-secondary/95 border border-white/[0.04] rounded-2xl p-3 flex flex-col items-center gap-1.5 shadow-2xl pointer-events-auto">
+                  <span className="text-[9px] text-brand-muted font-bold tracking-wider uppercase">{t.tvRemoteMode}</span>
+                  <div className="grid grid-cols-3 gap-1 w-24">
+                    <div />
+                    <button onClick={() => handleVolumeAdjustment(0.1)} className="p-1 bg-brand-card active:bg-brand-accent active:text-brand-bg text-white text-xs rounded text-center transition">▲</button>
+                    <div />
+                    <button onClick={() => { if(videoRef.current) videoRef.current.currentTime -= 10; }} className="p-1 bg-brand-card active:bg-brand-accent active:text-brand-bg text-white text-xs rounded text-center transition">◀</button>
+                    <button onClick={togglePlay} className="p-1 bg-brand-card active:bg-brand-accent active:text-brand-bg text-brand-accent text-[10px] rounded font-black transition">{isPlaying ? '▐▐' : '▶'}</button>
+                    <button onClick={() => { if(videoRef.current) videoRef.current.currentTime += 10; }} className="p-1 bg-brand-card active:bg-brand-accent active:text-brand-bg text-white text-xs rounded text-center transition">▶</button>
+                    <div />
+                    <button onClick={() => handleVolumeAdjustment(-0.1)} className="p-1 bg-brand-card active:bg-brand-accent active:text-brand-bg text-white text-xs rounded text-center transition">▼</button>
+                    <div />
+                  </div>
+                </div>
+              )}
+
+              {/* BOTTOM CONTROL DECK */}
+              <div className="space-y-3">
+                {/* SEEK BAR / MATCH TIMELINE SIMULATION */}
+                <div className="flex items-center gap-3">
+                  <span className="text-[10px] font-mono text-zinc-400 font-bold">
+                    {isLive ? '00:00' : formatTime(currentTime)}
+                  </span>
+                  
+                  <div className="flex-1 relative h-1 bg-white/20 rounded overflow-hidden">
+                    <div 
+                      className="absolute left-0 top-0 h-full bg-brand-accent glow-accent"
+                      style={{ width: isLive ? '100%' : `${(currentTime / (duration || 1)) * 100}%` }}
+                    />
+                    {isLive && (
+                      <div className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-brand-accent rounded-full border border-white right-0 shadow-[0_0_8px_rgba(0,194,255,0.8)]" />
+                    )}
+                  </div>
+
+                  <span className="text-[10px] font-mono text-brand-accent font-bold">
+                    {isLive ? 'LIVE' : formatTime(duration)}
+                  </span>
+                </div>
+
+                {/* CONTROL BUTTONS */}
+                <div className="flex items-center justify-between gap-1">
+                  {/* Left Side Controls (Play, Mute) */}
+                  <div className="flex items-center gap-1.5 sm:gap-3">
+                    <button 
+                      onClick={togglePlay} 
+                      className="p-2 sm:p-2.5 rounded-full bg-brand-accent text-brand-bg transition-all duration-250 hover:scale-110 shadow-lg shadow-brand-accent/25"
+                    >
+                      {isPlaying ? <Pause size={13} fill="currentColor" /> : <Play size={13} fill="currentColor" />}
+                    </button>
+
+                    <button 
+                      onClick={handleReconnect}
+                      className="p-1.5 sm:p-2 bg-brand-card hover:bg-white/5 text-brand-muted hover:text-white rounded-xl transition border border-white/5"
+                      title={t.reconnect}
+                    >
+                      <RotateCcw size={12} />
+                    </button>
+
+                    {/* Volume Slider with Mute button */}
+                    <div className="flex items-center gap-1 sm:gap-2 group/volume pl-0.5 sm:pl-1">
+                      <button onClick={toggleMute} className="text-zinc-300 hover:text-white transition">
+                        {isMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                      </button>
+                      <input 
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={isMuted ? 0 : volume}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          setVolume(val);
+                          setIsMuted(val === 0);
+                          if(videoRef.current) {
+                            videoRef.current.volume = val;
+                            videoRef.current.muted = val === 0;
+                          }
+                        }}
+                        className="w-8 sm:w-16 md:w-20 accent-brand-accent h-1 bg-[#1a243a] rounded outline-none cursor-pointer hidden xs:block"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Right Side Settings Controls */}
+                  <div className="flex items-center gap-1 md:gap-2">
+                    {/* Resolution badge */}
+                    <span className="text-[9px] md:text-[10px] text-brand-accent font-bold font-mono tracking-wider bg-brand-accent/10 border border-brand-accent/20 px-1.5 py-0.5 md:px-2.5 md:py-1 rounded">
+                      {quality === 'Auto' ? 'AUTO' : quality}
+                    </span>
+
+                    <button 
+                      onClick={togglePip} 
+                      className="p-1.5 sm:p-2 bg-brand-card hover:bg-brand-secondary text-brand-muted hover:text-white rounded-xl transition border border-white/5"
+                    >
+                      <TvIcon size={12} />
+                    </button>
+
+                    <button 
+                      onClick={() => setIsRotated(!isRotated)} 
+                      className={`p-1.5 sm:p-2 rounded-xl transition border border-white/5 flex items-center gap-1 text-xs font-bold ${
+                        isRotated 
+                          ? 'bg-brand-accent text-brand-bg font-black shadow-[0_0_12px_rgba(0,194,255,0.4)]' 
+                          : 'bg-brand-card hover:bg-brand-secondary text-brand-muted hover:text-white'
+                      }`}
+                      title="تدوير الشاشة"
+                    >
+                      <RotateCcw size={12} className={isRotated ? "rotate-90" : ""} />
+                      <span className="text-[9.5px] hidden md:inline">تدوير بالعرض</span>
+                    </button>
+
+                    <button 
+                      onClick={toggleFullscreen} 
+                      className="p-1.5 sm:p-2 bg-brand-card hover:bg-brand-secondary text-brand-muted hover:text-white rounded-xl transition border border-white/5"
+                    >
+                      {isFullscreen ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {settingsTab === "quality" && (
-              <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
-                <button
-                  onClick={() => chooseQuality(-1)}
-                  className={`w-full text-right px-3 py-1.5 rounded-lg text-[10px] font-bold flex justify-between items-center transition-all ${
-                    activeLevel === -1 ? "bg-[#00C2FF]/15 text-[#00C2FF] border border-[#00C2FF]/20" : "text-white/80 hover:bg-white/5"
-                  }`}
-                >
-                  <span>تلقائي (Auto)</span>
-                  {activeLevel === -1 && <span className="w-1.5 h-1.5 bg-[#00C2FF] rounded-full shadow-[0_0_6px_#00C2FF]" />}
-                </button>
-                {levels.length > 0 ? (
-                  levels.map((lvl, index) => (
-                    <button
-                      key={index}
-                      onClick={() => chooseQuality(index)}
-                      className={`w-full text-right px-3 py-1.5 rounded-lg text-[10px] font-bold flex justify-between items-center transition-all ${
-                        activeLevel === index ? "bg-[#00C2FF]/15 text-[#00C2FF] border border-[#00C2FF]/20" : "text-white/80 hover:bg-white/5"
-                      }`}
-                    >
-                      <span>{lvl.height ? `${lvl.height}p` : `سيرفر ${index + 1}`}</span>
-                      {activeLevel === index && <span className="w-1.5 h-1.5 bg-[#00C2FF] rounded-full shadow-[0_0_6px_#00C2FF]" />}
-                    </button>
-                  ))
-                ) : (
-                  <>
-                    {[1080, 720, 480].map((resVal, i) => (
+            {/* PIPELINE / CONFIG PANEL */}
+            {showConfig && (
+              <div className="absolute inset-y-0 right-0 w-72 bg-brand-bg/95 border-l border-white/5 p-4.5 z-10 flex flex-col gap-5 text-start text-sm text-white pointer-events-auto shadow-2xl overflow-y-auto">
+                <div className="flex items-center justify-between border-b border-white/[0.04] pb-2">
+                  <h4 className="font-bold flex items-center gap-1.5 text-zinc-200">
+                    <Sliders size={13} className="text-brand-accent" />
+                    <span>لوحة تحكم مشغل STAD</span>
+                  </h4>
+                  <button 
+                    onClick={() => setShowConfig(false)}
+                    className="text-[11px] font-bold text-zinc-500 hover:text-white bg-white/5 px-2 py-0.5 rounded transition"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Subtitle list */}
+                <div className="space-y-2">
+                  <label className="text-xs text-brand-muted font-bold block uppercase tracking-wider">
+                    <span className="flex items-center gap-1.5"><Subtitles size={12} /> {t.epg}</span>
+                  </label>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {(['Off', 'Arabic', 'English'] as const).map(sub => (
                       <button
-                        key={i}
-                        onClick={() => {
-                          setActiveLevel(i);
-                          triggerToast(`جودة ${resVal}p`);
-                          setShowSettings(false);
-                        }}
-                        className={`w-full text-right px-3 py-1.5 rounded-lg text-[10px] font-bold flex justify-between items-center transition-all ${
-                          activeLevel === i ? "bg-[#00C2FF]/15 text-[#00C2FF] border border-[#00C2FF]/20" : "text-white/80 hover:bg-white/5"
+                        key={sub}
+                        onClick={() => setSelectedSubtitle(sub)}
+                        className={`py-1.5 rounded-xl text-[10px] font-bold transition ${
+                          selectedSubtitle === sub 
+                            ? 'bg-brand-accent font-black text-brand-bg' 
+                            : 'bg-brand-card text-brand-muted hover:bg-brand-card/80'
                         }`}
                       >
-                        <span>{resVal}p</span>
-                        {activeLevel === i && <span className="w-1.5 h-1.5 bg-[#00C2FF] rounded-full shadow-[0_0_6px_#00C2FF]" />}
+                        {sub === 'Off' ? 'إيقاف' : sub === 'Arabic' ? 'عربي' : 'EN'}
                       </button>
                     ))}
-                  </>
-                )}
-              </div>
-            )}
-
-            {settingsTab === "audio" && (
-              <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
-                {audioTracks.length > 0 ? (
-                  audioTracks.map((tr, index) => (
-                    <button
-                      key={index}
-                      onClick={() => chooseAudioTrack(index)}
-                      className={`w-full text-right px-3 py-1.5 rounded-lg text-[10px] font-bold flex justify-between items-center transition-all ${
-                        activeAudioTrack === index ? "bg-[#00C2FF]/15 text-[#00C2FF]" : "text-white/80 hover:bg-white/5"
-                      }`}
-                    >
-                      <span>{tr.name || `مسار ${index + 1}`}</span>
-                      {activeAudioTrack === index && <span className="w-1.5 h-1.5 bg-[#00C2FF] rounded-full" />}
-                    </button>
-                  ))
-                ) : (
-                  <div className="space-y-1 py-1 px-1 text-[10px] text-gray-400 leading-relaxed font-bold">
-                    <p>المعلق العربي نشط</p>
                   </div>
-                )}
-              </div>
-            )}
+                </div>
 
-            {settingsTab === "captions" && (
-              <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
-                <button
-                  onClick={() => chooseCaptionsTrack(-1)}
-                  className={`w-full text-right px-3 py-1.5 rounded-lg text-[10px] font-bold flex justify-between items-center transition-all ${
-                    activeCaptionsTrack === -1 ? "bg-[#00C2FF]/15 text-[#00C2FF] border border-[#00C2FF]/20" : "text-white/80 hover:bg-white/5"
-                  }`}
-                >
-                  <span>إيقاف الترجمة</span>
-                  {activeCaptionsTrack === -1 && <span className="w-1.5 h-1.5 bg-[#00C2FF] rounded-full shadow-[0_0_6px_#00C2FF]" />}
-                </button>
-                {captionsTracks.length > 0 ? (
-                  captionsTracks.map((track, index) => (
-                    <button
-                      key={index}
-                      onClick={() => chooseCaptionsTrack(index)}
-                      className={`w-full text-right px-3 py-1.5 rounded-lg text-[10px] font-bold flex justify-between items-center transition-all ${
-                        activeCaptionsTrack === index ? "bg-[#00C2FF]/15 text-[#00C2FF] border border-[#00C2FF]/20" : "text-white/80 hover:bg-white/5"
-                      }`}
-                    >
-                      <span>{track.label || track.language || `ترجمة ${index + 1}`}</span>
-                      {activeCaptionsTrack === index && <span className="w-1.5 h-1.5 bg-[#00C2FF] rounded-full shadow-[0_0_6px_#00C2FF]" />}
-                    </button>
-                  ))
-                ) : (
-                  <>
-                    {["العربية", "English"].map((lang, lIdx) => (
+                {/* Stream quality selection */}
+                <div className="space-y-2">
+                  <label className="text-xs text-brand-muted font-bold block uppercase tracking-wider">
+                    ⚡ {t.quality}
+                  </label>
+                  <div className="grid grid-cols-4 gap-1">
+                    {(['Auto', '1080p', '720p', '480p'] as const).map(res => (
                       <button
-                        key={lIdx}
-                        onClick={() => {
-                          setActiveCaptionsTrack(lIdx);
-                          triggerToast(`ترجمة: ${lang}`);
-                          setShowSettings(false);
-                        }}
-                        className={`w-full text-right px-3 py-1.5 rounded-lg text-[10px] font-bold flex justify-between items-center transition-all ${
-                          activeCaptionsTrack === lIdx ? "bg-[#00C2FF]/15 text-[#00C2FF] border border-[#00C2FF]/20" : "text-white/80 hover:bg-white/5"
+                        key={res}
+                        onClick={() => setQuality(res)}
+                        className={`py-1.5 rounded-xl text-[10px] font-bold transition ${
+                          quality === res 
+                            ? 'bg-brand-accent font-black text-brand-bg animate-pulse' 
+                            : 'bg-brand-card text-brand-muted hover:bg-brand-card/85'
                         }`}
                       >
-                        <span>ترجمة - {lang}</span>
-                        {activeCaptionsTrack === lIdx && <span className="w-1.5 h-1.5 bg-[#00C2FF] rounded-full shadow-[0_0_6px_#00C2FF]" />}
+                        {res === 'Auto' ? 'تلقائي' : res}
                       </button>
                     ))}
-                  </>
-                )}
+                  </div>
+                </div>
+
+                {/* Video diagnostics stats */}
+                <div className="space-y-2.5 bg-brand-card/40 p-3.5 rounded-2xl border border-white/[0.03]">
+                  <h5 className="text-[10px] font-bold text-brand-accent font-mono tracking-wider uppercase mb-1">
+                    سجل تشخيصات مشغل STAD
+                  </h5>
+                  <div className="space-y-2 text-xs text-brand-muted font-mono">
+                    <div className="flex justify-between">
+                      <span>عقدة السيرفر:</span>
+                      <span className="text-zinc-200">خادم STAD الأوروبي الذكي</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>زمن الاستجابة:</span>
+                      <span className="text-emerald-400 animate-pulse">{latency} ثانية</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>معدل البيانات:</span>
+                      <span className="text-zinc-200">{bitrate}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>معدل الإطارات:</span>
+                      <span className="text-zinc-200">60 إطار/ث</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-auto pt-2 border-t border-white/[0.04] text-[10px] text-brand-muted text-center font-bold">
+                  {t.swipeBrightnessVolume}
+                </div>
               </div>
             )}
+          </div>
 
-            {settingsTab === "speed" && (
-              <div className="space-y-1 pr-1">
-                {[0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
+          {/* BANNER REVENUES BLOCK */}
+        </div>
+
+        {/* Channels EPG & Server Selection Panel */}
+        <div className="bg-brand-card/30 rounded-3xl border border-white/[0.04] p-5 flex flex-col gap-5">
+          <div>
+            <h3 className="text-xs font-black text-white mb-2.5 pb-2 border-b border-white/[0.04] flex items-center gap-1.5 uppercase tracking-wider select-none">
+              <Settings2 size={13} className="text-brand-accent" />
+              <span>{t.servers}</span>
+            </h3>
+            
+            {servers && servers.length > 0 ? (
+              <div className="space-y-1.5">
+                {servers.map((server, idx) => (
                   <button
-                    key={rate}
-                    onClick={() => chooseSpeed(rate)}
-                    className={`w-full text-right px-3 py-1.5 rounded-lg text-[10px] font-bold flex justify-between items-center transition-all ${
-                      playbackRate === rate ? "bg-[#00C2FF]/15 text-[#00C2FF] border border-[#00C2FF]/20" : "text-white/80 hover:bg-white/5"
+                    key={idx}
+                    onClick={() => changeServer(idx, server.url)}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-bold rounded-2xl text-start border transition duration-300 ${
+                      selectedServerIndex === idx 
+                        ? 'bg-brand-accent/10 text-brand-accent border-brand-accent/30 shadow-[0_0_12px_rgba(0,194,255,0.08)]' 
+                        : 'bg-brand-bg/60 hover:bg-brand-card text-brand-muted border-white/[0.02]'
                     }`}
                   >
-                    <span>{rate === 1 ? "طبيعي" : `${toArabicNumerals(rate.toString())}x`}</span>
-                    {playbackRate === rate && <span className="w-1.5 h-1.5 bg-[#00C2FF] rounded-full shadow-[0_0_6px_#00C2FF]" />}
+                    <span>{server.name}</span>
+                    {selectedServerIndex === idx && (
+                      <span className="relative flex h-1.5 w-1.5 shrink-0">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-accent opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-brand-accent"></span>
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
+            ) : (
+              <p className="text-xs text-brand-muted font-semibold">{t.noResults}</p>
             )}
+          </div>
 
-            {settingsTab === "help" && (
-              <div className="text-right space-y-2 text-[10px] text-gray-300 px-2">
-                <div className="flex justify-between items-center py-1">
-                  <span className="font-bold text-white">وضع البروكسي:</span>
-                  <button
-                    onClick={() => {
-                      setUseProxy(!useProxy);
-                      triggerToast(useProxy ? "اتصال مباشر" : "بروكسي مفعل");
-                      setShowSettings(false);
-                    }}
-                    className={`px-2.5 py-1 rounded-lg text-[10px] font-black ${useProxy ? "bg-[#00C2FF] text-slate-950" : "bg-white/10 text-white"}`}
+          {/* Match / Channel Program Guide */}
+          <div className="flex-1 flex flex-col min-h-[220px]">
+            <h3 className="text-xs font-black text-white mb-2.5 pb-2 border-b border-white/[0.04] flex items-center gap-1.5 uppercase tracking-wider select-none">
+              <TvIcon size={13} className="text-brand-accent" />
+              <span>{t.epg}</span>
+            </h3>
+
+            {epg && epg.length > 0 ? (
+              <div className="space-y-2 max-h-[240px] overflow-y-auto pr-1">
+                {epg.map((item, idx) => (
+                  <div 
+                    key={idx} 
+                    className="bg-brand-bg/40 hover:bg-brand-bg border border-white/[0.02] p-3 rounded-2xl transition flex flex-col gap-1"
                   >
-                    {useProxy ? "مفعّل" : "معطّل"}
-                  </button>
-                </div>
-                <p>استخدم البروكسي لتجاوز الحجب</p>
+                    <span className="text-[10px] font-black text-brand-accent font-mono tracking-wider">
+                      {item.time}
+                    </span>
+                    <span className="text-xs text-white font-bold truncate leading-tight">
+                      {lang === 'ar' ? item.titleAr : item.titleEn}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-center p-4">
+                <p className="text-xs text-brand-muted/65 font-bold italic">{t.noEPG}</p>
               </div>
             )}
           </div>
-        )}
+
+          {/* Quick Refresh Reconnect */}
+          <button
+            onClick={handleReconnect}
+            className="w-full py-3 bg-brand-card/50 hover:bg-brand-card text-brand-accent hover:text-white text-xs font-black rounded-2xl transition flex items-center justify-center gap-2 border border-white/5 shadow-[0_0_15px_rgba(0,194,255,0.02)]"
+          >
+            <RotateCcw size={13} />
+            <span>{t.reconnect}</span>
+          </button>
+        </div>
       </div>
     </div>
   );
